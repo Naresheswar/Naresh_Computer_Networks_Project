@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GuardCode Live Link Monitor</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/chart.umd.js"></script>
+</head>
+<body>
+<header>
+  <div>
+    <h1>GuardCode <span class="sub">Live link monitor</span></h1>
+    <p class="tag">Soft-Syndrome Guard on a CRC-8 protected neural FEC link &middot; 32-bit payload &middot; every frame logged to SQLite</p>
+  </div>
+  <nav><a href="/" class="active">Live</a><a href="/explorer">Database explorer</a></nav>
+</header>
+
+<section class="controls card">
+  <div class="ctl">
+    <label>Eb/N0 <b id="ebnoVal">4.0</b> dB</label>
+    <input id="ebno" type="range" min="-1" max="9" step="0.25" value="4">
+  </div>
+  <div class="ctl">
+    <label>Channel</label>
+    <div class="seg" id="chanSeg">
+      <button data-ch="awgn" class="on">AWGN</button>
+      <button data-ch="burst">Burst (Gilbert-Elliott)</button>
+      <button data-ch="fading">Rayleigh fading</button>
+    </div>
+  </div>
+  <div class="ctl">
+    <label>Frames per scheme / s</label>
+    <select id="rate"><option value="25">50</option><option value="100" selected>200</option><option value="250">500</option><option value="500">1000</option><option value="1000">2000</option></select>
+  </div>
+  <div class="ctl btns">
+    <button id="storm" class="warn">Inject 20 s burst storm</button>
+    <button id="pause">Pause</button>
+    <button id="reset">Reset counters</button>
+  </div>
+</section>
+
+<section class="status">
+  <div class="pill" id="runPill">running</div>
+  <div class="stat"><span>Effective channel</span><b id="effChan">AWGN</b></div>
+  <div class="stat"><span>Adaptive profile</span><b id="profile">awgn</b></div>
+  <div class="stat"><span>Burst index (EWMA)</span><b id="bidx">-</b></div>
+  <div class="stat"><span>DB rows (frames)</span><b id="dbRows">0</b></div>
+  <div class="stat"><span>Insert rate</span><b id="dbRate">0</b></div>
+  <div class="stat"><span>DB size</span><b id="dbSize">0</b></div>
+</section>
+
+<section class="card">
+  <h2>Scheme scoreboard <span class="hint">since last reset</span></h2>
+  <div class="tablewrap">
+  <table id="kpi">
+    <thead><tr><th>Scheme</th><th>Frames</th><th>FER</th><th>BER</th><th>Detected (ARQ)</th><th>Undetected</th><th>% errors undetected</th><th>Goodput (bits/use)</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  </div>
+  <p class="note">An <b>undetected</b> frame is decoded wrongly but still passes the receiver checks, so corrupted data reaches the application. GuardCode's Soft-Syndrome Guard computes, for every frame that passes CRC-8, the probability that it is still wrong, and sends risky frames back for retransmission &mdash; no extra bits, unmodified CRC.</p>
+</section>
+
+<section class="grid">
+  <div class="card"><h2>Cumulative undetected errors</h2><canvas id="cUE"></canvas></div>
+  <div class="card"><h2>Rolling frame error rate</h2><canvas id="cFER"></canvas></div>
+  <div class="card"><h2>Rolling ARQ goodput</h2><canvas id="cGP"></canvas></div>
+  <div class="card"><h2>Adaptive controller: burst index</h2><canvas id="cB"></canvas></div>
+</section>
+
+<section class="card">
+  <h2>Undetected-error events <span class="hint">latest first</span></h2>
+  <ul id="events" class="events"><li class="muted">none yet</li></ul>
+</section>
+
+<footer>BCSE308L Computer Networks project &middot; GuardCode &middot; data/guardcode.db</footer>
+
+<script src="/static/live.js"></script>
+</body>
+</html>

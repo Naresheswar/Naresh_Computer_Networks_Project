@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GuardCode Database Explorer</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>GuardCode <span class="sub">Database explorer</span></h1>
+    <p class="tag">Read-only SQL over data/guardcode.db &middot; tables: frames, runs, benchmark, adaptive_log &middot; view: v_summary</p>
+  </div>
+  <nav><a href="/">Live</a><a href="/explorer" class="active">Database explorer</a></nav>
+</header>
+<section class="status" id="stats"></section>
+<section class="card">
+  <h2>Preset queries</h2>
+  <div class="presets">
+    {% for name, sql in presets.items() %}<button data-sql="{{ sql|e }}">{{ name }}</button>{% endfor %}
+  </div>
+  <textarea id="sql">SELECT scheme, COUNT(*) AS frames, SUM(outcome=2) AS undetected FROM frames GROUP BY scheme</textarea>
+  <p><button id="run">Run query</button> <span id="meta" class="muted"></span></p>
+  <p class="note">outcome codes: 0 = OK, 1 = DETECTED (ARQ retransmits), 2 = UNDETECTED (corrupted data accepted), 3 = FALSE_REJECT</p>
+</section>
+<section class="card">
+  <div class="tablewrap"><table id="out"><thead></thead><tbody></tbody></table></div>
+</section>
+<script>
+const $ = (id) => document.getElementById(id);
+function stats() {
+  fetch("/api/dbstats").then(r => r.json()).then(s => {
+    $("stats").innerHTML = Object.entries(s).map(([k, v]) =>
+      `<div class="stat"><span>${k === "size_mb" ? "database size (MB)" : k + " rows"}</span><b>${(+v).toLocaleString()}</b></div>`).join("");
+  });
+}
+function run() {
+  $("meta").textContent = "running...";
+  fetch("/api/query", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql: $("sql").value }) })
+    .then(r => r.json()).then(d => {
+      const t = $("out");
+      if (d.error) { $("meta").innerHTML = `<span class="err">${d.error}</span>`; t.tHead.innerHTML = ""; t.tBodies[0].innerHTML = ""; return; }
+      $("meta").textContent = `${d.rows.length} row(s) in ${d.ms} ms` + (d.rows.length === 500 ? " (first 500 shown)" : "");
+      t.tHead.innerHTML = "<tr>" + d.columns.map(c => `<th>${c}</th>`).join("") + "</tr>";
+      t.tBodies[0].innerHTML = d.rows.map(r => "<tr>" + r.map(v => `<td>${v === null ? "" : v}</td>`).join("") + "</tr>").join("");
+    });
+}
+document.querySelectorAll(".presets button").forEach(b => b.addEventListener("click", () => { $("sql").value = b.dataset.sql; run(); }));
+$("run").addEventListener("click", run);
+stats(); setInterval(stats, 3000); run();
+</script>
+</body>
+</html>
