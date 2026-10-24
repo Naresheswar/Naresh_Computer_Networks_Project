@@ -10,7 +10,7 @@ const pct = (x) => `${x.toFixed(0)} %`;
 const e = (x) => (x === 0 ? "0" : x.toExponential(2));
 const P = S.pooled, RD = S.reduction;
 
-const sch = ["Uncoded+CRC", "Hamming+CRC", "Hamming+CRC+SSG", "Neural+CRC", "Neural+CRC+LLR", "GuardCode"];
+const sch = ["Uncoded+CRC", "Hamming+CRC", "Hamming+CRC+SSG", "Neural+CRC", "Neural+CRC+LLR", "GuardCode", "GuardCode-ML"];
 function pointTable(prof, metric, fmt) {
   const eb = ["0", "1", "2", "3", "4", "5", "6", "7"];
   return [["Scheme", ...eb.map((x) => `${x} dB`)], ...sch.map((s) => [s, ...eb.map((x) => fmt(S.points[prof][s][x][metric]))])];
@@ -118,6 +118,8 @@ const blocks = [
   { p: "Summing R(y) over frames gives the receiver its own estimate of how many undetected errors it has delivered, without knowing the transmitted data. Section 6.4 checks how far this estimate can be trusted." },
 
   // ---------------- 4
+  { h2: "3.6 Learned risk classifier (GuardCode-ML)" },
+  { p: "The Soft-Syndrome Guard is an exact posterior only when the decoder's posteriors are calibrated, and a neural decoder is only approximately calibrated. GuardCode-ML therefore adds a second, learned opinion. A gradient-boosted decision-tree classifier (scikit-learn HistGradientBoostingClassifier, open source) is trained on CRC-passing frames to predict whether the frame is nevertheless wrong. Its inputs are all available at the receiver: the SSG risk, the smallest |LLR|, the per-byte posterior confidence and runner-up gap, the residual energy after re-encoding the decoded bits, and the burst index. It needs no extra bits and leaves the CRC polynomial unchanged. Its acceptance threshold is calibrated to the same retransmission budget as the other gates (1 % of correct frames rejected at 3 dB). Training and benchmark random seeds are disjoint." },
   { h1: "4. Implementation" },
   { table: [["Component", "File", "Technology"],
     ["CRC, parity-check and dual-code matrices", "guardcode/crc.py", "Python, numpy"],
@@ -199,6 +201,8 @@ const blocks = [
   { p: "A training-time version of the same idea was also tried: a differentiable loss that penalises the probability of CRC-blind errors during training (guardcode/losses.py). Fine-tuning with weights \u03BB = 5 and 50 did not change the measured share of undetected errors (0.106 %, 0.101 % and 0.099 % for \u03BB = 0, 5 and 50 at 2-4 dB). With byte-level outputs, a single wrong byte is always caught by CRC-8, and the multi-byte coincidences that escape cannot be shaped by per-byte posteriors. This variant is therefore not claimed. The models are kept in models/ablation/ for reproducibility." },
 
   // ---------------- 7
+  { h2: "6.7 Learned gate: GuardCode-ML" },
+  { p: `Pooled over Eb/N0 = 0-7 dB at the same retransmission budget, GuardCode-ML left ${P.awgn["GuardCode-ML"].ue.toLocaleString("en-IN")} undetected frames on AWGN against ${P.awgn.GuardCode.ue.toLocaleString("en-IN")} for the Soft-Syndrome Guard (${pct(RD.awgn.ml_vs_guard)} fewer) and ${P.burst["GuardCode-ML"].ue.toLocaleString("en-IN")} against ${P.burst.GuardCode.ue.toLocaleString("en-IN")} on the burst channel (${pct(RD.burst.ml_vs_guard)} fewer). Relative to the classic min-|LLR| test the reductions are ${pct(RD.awgn.ml_vs_llr)} (AWGN) and ${pct(RD.burst.ml_vs_llr)} (burst). Goodput is unchanged to within about 0.1 % from 3 dB upward. The classifier is trained on a limited number of wrong frames, so the gain should be confirmed with larger runs before it is claimed as general.` },
   { h1: "7. Patentability Assessment" },
   { table: [["Criterion", "Assessment"],
     ["Novelty", "No document found that uses the dual-code expansion of a standard CRC to compute the posterior probability that a CRC-passing frame is wrong, and uses it as an ARQ acceptance gate with a risk ledger and per-profile thresholds."],

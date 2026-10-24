@@ -28,7 +28,7 @@ def pooled(prof, sch):
                 fr=int(sum(r["false_rej"] for r in sub)))
 
 
-schemes = ["Uncoded+CRC", "Hamming+CRC", "Hamming+CRC+SSG", "Neural+CRC", "Neural+CRC+LLR", "GuardCode"]
+schemes = ["Uncoded+CRC", "Hamming+CRC", "Hamming+CRC+SSG", "Neural+CRC", "Neural+CRC+LLR", "GuardCode", "GuardCode-ML"]
 S = dict(k=32, crc_dmin=crc().min_distance(), bench_frames=int(rows[0]["frames"]),
          ebnos=sorted({r["ebno_db"] for r in rows}))
 S["pooled"] = {p: {s: pooled(p, s) for s in schemes} for p in ("awgn", "burst")}
@@ -48,7 +48,9 @@ S["reduction"] = {p: dict(
     guard_vs_llr=red(P[p]["GuardCode"]["ue"], P[p]["Neural+CRC+LLR"]["ue"]),
     guard_vs_plain=red(P[p]["GuardCode"]["ue"], P[p]["Neural+CRC"]["ue"]),
     hamssg_vs_ham=red(P[p]["Hamming+CRC+SSG"]["ue"], P[p]["Hamming+CRC"]["ue"]),
-    guard_vs_ham=red(P[p]["GuardCode"]["ue"], P[p]["Hamming+CRC"]["ue"])) for p in ("awgn", "burst")}
+    guard_vs_ham=red(P[p]["GuardCode"]["ue"], P[p]["Hamming+CRC"]["ue"]),
+    ml_vs_guard=red(P[p]["GuardCode-ML"]["ue"], P[p]["GuardCode"]["ue"]),
+    ml_vs_llr=red(P[p]["GuardCode-ML"]["ue"], P[p]["Neural+CRC+LLR"]["ue"])) for p in ("awgn", "burst")}
 S["fer_gain"] = {e: dict(neural=get("awgn", "Neural+CRC", e)["fer"], hamming=get("awgn", "Hamming+CRC", e)["fer"]) for e in (3.0, 4.0, 5.0, 6.0)}
 S["analysis"] = an
 S["patent_table"] = [["Scheme (gate)", "AWGN: undetected", "AWGN: % of errors", "Burst: undetected", "Burst: % of errors"]] + [
@@ -62,7 +64,9 @@ S["patent_text"] = (
     f"Applied unchanged to a classical Hamming(7,4) soft decoder it reduced undetected errors by {R['awgn']['hamssg_vs_ham']:.0f} % (AWGN) and "
     f"{R['burst']['hamssg_vs_ham']:.0f} % (burst), demonstrating that the guard is independent of the decoder. Because both gates were held to the same "
     f"retransmission budget, the ARQ goodput of the guarded link stayed within about 1 % of the unguarded link from 3 dB upward, the "
-    f"usable operating range, and within a few percent at 0-2 dB, where goodput is already very low.")
+    f"usable operating range, and within a few percent at 0-2 dB, where goodput is already very low. "
+    f"Replacing the analytic risk by a learned gradient-boosted risk classifier built on the same inputs lowered the undetected count by a further "
+    f"{R['awgn']['ml_vs_guard']:.0f} % (AWGN) and {R['burst']['ml_vs_guard']:.0f} % (burst) at the same retransmission budget.")
 json.dump(S, open(os.path.join(RES, "summary.json"), "w"), indent=1)
 print(json.dumps(S["reduction"], indent=1))
 print(json.dumps({p: {s: (v["ue"], v["fe"], round(v["est"], 1)) for s, v in P[p].items()} for p in P}, indent=1))

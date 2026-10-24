@@ -59,7 +59,13 @@ class LiveEngine(threading.Thread):
             "awgn": nn_awgn.with_gate("ssg", ta["ssg"], "GuardCode-Adaptive"),
             "burst": nn_burst.with_gate("ssg", tb["ssg"], "GuardCode-Adaptive"),
         })
-        self.names = [s.name for s in self.schemes] + ["GuardCode-Adaptive"]
+        self.adaptive_ml = None
+        if all(os.path.exists(model_path(m)) and "ml" in t for m, t in (("awgn", ta), ("burst", tb))):
+            self.adaptive_ml = AdaptiveController({
+                m: nn.with_gate("ml", t["ml"], "GuardCode-ML-Adaptive", ml=MLGuard.load(model_path(m)))
+                for m, nn, t in (("awgn", nn_awgn, ta), ("burst", nn_burst, tb))})
+        self.names = [s.name for s in self.schemes] + ["GuardCode-Adaptive"] + (
+            ["GuardCode-ML-Adaptive"] if self.adaptive_ml else [])
         self.reset_stats()
         self.con = db.connect()
         self.run_id = db.new_run("live", "dashboard session", self.con)
@@ -106,16 +112,19 @@ class LiveEngine(threading.Thread):
         fb = self.crc.encode(msgs)
         rows = []
         active = self.adaptive.active
-        for s in self.schemes + [None]:
-            adaptive = s is None
+        for s in self.schemes + [None] + ([self.adaptive_ml] if self.adaptive_ml else []):
+            adaptive = s is None or s is self.adaptive_ml
+            ctl = self.adaptive if s is None else self.adaptive_ml
             if adaptive:
-                s = self.adaptive.scheme          # profile chosen from previous frames (ACK feedback)
+                s = ctl.scheme          # profile chosen from previous frames (ACK feedback)
             x = s.encode(fb.astype(np.float64))
             y, h, _ = transmit_np(x, self.ebno, s.rate, cfg, self.rng)
             bits, accept, crc_ok, sc = s.decide(y, h, self.ebno)
             if adaptive:
-                self.last_bidx, active = self.adaptive.observe(y, bits, h if chan == "fading" else None)
-            name = "GuardCode-Adaptive" if adaptive else s.name
+                bidx, act = ctl.observe(y, bits, h if chan == "fading" else None)
+                if ctl is self.adaptive:
+                    self.last_bidx, active = bidx, act
+            name = s.name
             wrong = (bits != fb).any(axis=1)
             out = np.where(wrong, np.where(accept, UNDETECTED, DETECTED), np.where(accept, OK, FALSE_REJ))
             be = (bits[:, :32] != msgs).sum(axis=1)

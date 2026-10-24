@@ -5,6 +5,7 @@ const COLORS = {
   "GuardCode": "#d92d20",
   "GuardCode-ML": "#7a5af8",
   "GuardCode-Adaptive": "#079455",
+  "GuardCode-ML-Adaptive": "#0e9384",
 };
 const $ = (id) => document.getElementById(id);
 const fmt = (x, d = 3) => (x === 0 ? "0" : x < 1e-3 ? x.toExponential(2) : x.toFixed(d));

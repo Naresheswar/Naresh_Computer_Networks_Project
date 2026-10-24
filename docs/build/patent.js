@@ -88,6 +88,7 @@ const blocks = [
     "Any linear error-detecting code (CRC-16, CRC-24, CRC-32, checksums expressible over GF(2)) may be used; for r > 16 the sum over 2^r vectors may be evaluated by a fast Walsh-Hadamard transform over the syndrome space or restricted to the dominant terms.",
     "The soft output may come from any decoder: Hamming, BCH, convolutional (BCJR), LDPC, polar, turbo, or neural decoders, including outputs of HARQ soft-combining.",
     "The guard may be applied per code block in multi-block transport blocks, and the per-block risks combined.",
+    "The residual risk may be refined by a trained classifier (for example a gradient-boosted decision tree) that takes the soft-syndrome risk, the minimum log-likelihood ratio, per-group confidence and residual-energy features as inputs and is calibrated to the same retransmission budget.",
     "The acceptance rule may grade the response: deliver, deliver-with-flag, or retransmit, using two thresholds.",
   ] },
 

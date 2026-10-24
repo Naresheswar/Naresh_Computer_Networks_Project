@@ -24,22 +24,25 @@ import matplotlib.pyplot as plt  # noqa: E402
 from guardcode.adaptive import AdaptiveController                       # noqa: E402
 from guardcode.channels import ChannelConfig, transmit_np                # noqa: E402
 from guardcode.linksim import run_batch                                  # noqa: E402
+from guardcode.mlguard import MLGuard, model_path  # noqa: E402
 from guardcode.schemes import MODELS, ROOT, HammingScheme, NeuralScheme, crc, ssg, thresholds  # noqa: E402
 
 RES = os.path.join(ROOT, "results")
 
 
-def collect(scheme, prof, ebnos, n, seed, bitwise=False):
+def collect(scheme, prof, ebnos, n, seed, bitwise=False, ml=False):
     c, rng = crc(), np.random.default_rng(seed)
-    W, OKc, R, L, RB = [], [], [], [], []
+    W, OKc, R, L, RB, M = [], [], [], [], [], []
     for e in ebnos:
         for _ in range(max(1, n // len(ebnos) // 20000)):
             r = run_batch(scheme, c, e, ChannelConfig(prof), 20000, rng)
             W.append(r["wrong"]); OKc.append(r["crc_ok"]); R.append(r["risk"]); L.append(r["llr"])
+            if ml:
+                M.append(r["ml"])
             if bitwise:   # ablation: guard computed from independent bit marginals only
                 RB.append(ssg().risk(r["p1"]))
     out = [np.concatenate(W), np.concatenate(OKc), np.concatenate(R), np.concatenate(L)]
-    return out + ([np.concatenate(RB)] if bitwise else [])
+    return out + ([np.concatenate(RB)] if bitwise else []) + ([np.concatenate(M)] if ml else [])
 
 
 def tradeoff(prof, n, out):
@@ -48,15 +51,23 @@ def tradeoff(prof, n, out):
     fig, ax = plt.subplots(figsize=(7, 5))
     res = {}
     for label, s, col in (("Hamming", ham, "#1f77b4"), ("Neural", nn, "#d62728")):
-        wrong, ok, risk, llr, riskb = collect(s, prof, [2.0, 3.0, 4.0], n, 5, bitwise=True)
+        is_nn = s is nn and os.path.exists(model_path(prof))
+        if is_nn:
+            s = nn.with_gate("ml", 1.0, "nn-ml", ml=MLGuard.load(model_path(prof)))
+        got = collect(s, prof, [2.0, 3.0, 4.0], n, 5, bitwise=True, ml=is_nn)
+        wrong, ok, risk, llr, riskb = got[:5]
+        mlsc = got[5] if is_nn else None
         good = ~wrong
         ue_mask = wrong & ok
         N = len(wrong)
         frrs = np.array([0, 0.002, 0.005, 0.01, 0.02, 0.03, 0.05, 0.08, 0.12])
-        ssg_ue, llr_ue, bit_ue = [], [], []
+        ssg_ue, llr_ue, bit_ue, ml_ue = [], [], [], []
         for f in frrs:
             if f == 0:
-                ssg_ue.append(ue_mask.sum()); llr_ue.append(ue_mask.sum()); bit_ue.append(ue_mask.sum()); continue
+                ssg_ue.append(ue_mask.sum()); llr_ue.append(ue_mask.sum()); bit_ue.append(ue_mask.sum())
+                ml_ue.append(ue_mask.sum()); continue
+            if mlsc is not None:
+                ml_ue.append(int((ue_mask & (mlsc <= np.quantile(mlsc[good & ok], 1 - f))).sum()))
             tr = np.quantile(risk[good & ok], 1 - f)
             tb = np.quantile(riskb[good & ok], 1 - f)
             tl = np.quantile(llr[good & ok], f)
@@ -67,8 +78,12 @@ def tradeoff(prof, n, out):
         ax.plot(100 * frrs, llr_ue, "--", marker="v", color=col, label=f"{label} + classic min-|LLR| test")
         ax.plot(100 * frrs, bit_ue, ":", marker="s", color=col, label=f"{label} + SSG, bit-wise variant")
         ax.plot(100 * frrs, ssg_ue, "-", marker="o", color=col, label=f"{label} + Soft-Syndrome Guard (group WHT)")
+        if mlsc is not None:
+            ml_ue = np.array(ml_ue) / N
+            ax.plot(100 * frrs, ml_ue, "-", marker="P", color="#2ca02c", label=f"{label} + GuardCode-ML (learned gate)")
         res[label] = dict(frames=int(N), crc_undetected=int(ue_mask.sum()), frr_pct=(100 * frrs).tolist(),
-                          uer_llr=llr_ue.tolist(), uer_ssg=ssg_ue.tolist(), uer_ssg_bitwise=bit_ue.tolist())
+                          uer_llr=llr_ue.tolist(), uer_ssg=ssg_ue.tolist(), uer_ssg_bitwise=bit_ue.tolist(),
+                          **(dict(uer_ml=ml_ue.tolist()) if mlsc is not None else {}))
     ax.set_yscale("log")
     ax.set_xlabel("Correct frames rejected (extra retransmissions), %")
     ax.set_ylabel("Undetected frame error rate")
