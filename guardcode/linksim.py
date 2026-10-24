@@ -25,7 +25,7 @@ def run_batch(scheme, crc, ebno_db, cfg, B, rng, k_info=32):
     bit_err = (bits[:, :k_info] != msgs).sum(axis=1)
     outcome = np.where(wrong, np.where(accept, UNDETECTED, DETECTED), np.where(accept, OK, FALSE_REJ))
     return dict(wrong=wrong, bit_err=bit_err, crc_ok=crc_ok, accept=accept, outcome=outcome,
-                risk=sc["risk"], llr=sc["llr"], p1=sc["p1"], y=y, h=h, bits=bits)
+                risk=sc["risk"], llr=sc["llr"], p1=sc["p1"], ml=sc.get("ml"), y=y, h=h, bits=bits)
 
 
 def simulate(scheme, crc, ebno_db, cfg, n_frames, batch=20000, seed=0):
