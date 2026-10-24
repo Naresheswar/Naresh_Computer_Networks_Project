@@ -71,6 +71,7 @@ All schemes send a 32-bit payload plus CRC-8 (40-bit frame). Every coded scheme 
 | Neural+CRC | Learned neural code, standard CRC acceptance |
 | Neural+CRC+LLR | Neural code with the classic min-\|LLR\| threshold test (prior-art style gate) |
 | **GuardCode** | Neural code with the Soft-Syndrome Guard |
+| **GuardCode-ML** | Neural code with a learned risk classifier (scikit-learn `HistGradientBoostingClassifier`, `guardcode/mlguard.py`) trained on CRC-passing frames. Features: SSG risk, min-\|LLR\|, per-byte confidence, residual energy, burst index. Same 1% false-reject budget |
 | **GuardCode-Adaptive** | Neural code with SSG, plus residual-based switching between AWGN and burst profiles |
 
 Both gates are calibrated to the same retransmission budget: 1% of correct frames rejected at 3 dB. Any reduction in undetected errors therefore comes from the better test, not from rejecting more frames.
@@ -84,9 +85,15 @@ These numbers come from `results/benchmark.csv`: 300,000 frames per point, Eb/N0
 | AWGN | Neural + CRC | 1,559 |
 | AWGN | Neural + classic min-\|LLR\| test | 1,428 |
 | AWGN | **GuardCode (Neural + SSG)** | **742** (48% fewer than the LLR test) |
+| AWGN | **GuardCode-ML** (Neural + learned gradient-boosted gate) | **360** (51% fewer than GuardCode) |
 | AWGN | Hamming + CRC → + SSG | 2,472 → 486 (80% fewer) |
 | Burst | Neural + classic min-\|LLR\| test | 3,054 |
 | Burst | **GuardCode** | **1,531** (50% fewer) |
+| Burst | **GuardCode-ML** | **1,183** (23% fewer than GuardCode) |
 | Burst | Hamming + CRC → + SSG | 4,161 → 2,135 (49% fewer) |
 
 From 3 dB upward, ARQ goodput stays within about 1% of the unguarded receiver.
+
+## GuardCode-ML (learned gate)
+
+`python scripts/train_mlguard.py --frames 2000000` trains one gradient-boosted classifier per channel profile (`models/mlguard_<profile>.joblib`; hold-out AUC/AP in `models/mlguard_*_report.json`). Then run `python -m guardcode.evaluate` to calibrate its threshold and benchmark it. Training data and benchmark seeds are disjoint. It needs scikit-learn at run time; without the `.joblib` files the project behaves as before.
