@@ -19,6 +19,7 @@ from guardcode.adaptive import AdaptiveController                       # noqa: 
 from guardcode.channels import ChannelConfig, transmit_np                # noqa: E402
 from guardcode.db import Database                                        # noqa: E402
 from guardcode.linksim import DETECTED, FALSE_REJ, OK, UNDETECTED        # noqa: E402
+from guardcode.mlguard import MLGuard, model_path                         # noqa: E402
 from guardcode.schemes import (MODELS, HammingScheme, NeuralScheme,      # noqa: E402
                                Uncoded, crc, thresholds)
 
@@ -52,6 +53,8 @@ class LiveEngine(threading.Thread):
             nn_awgn.with_gate("llr", ta["llr"], "Neural+CRC+LLR"),
             nn_awgn.with_gate("ssg", ta["ssg"], "GuardCode"),
         ]
+        if os.path.exists(model_path("awgn")) and "ml" in ta:
+            self.schemes.append(nn_awgn.with_gate("ml", ta["ml"], "GuardCode-ML", ml=MLGuard.load(model_path("awgn"))))
         self.adaptive = AdaptiveController({
             "awgn": nn_awgn.with_gate("ssg", ta["ssg"], "GuardCode-Adaptive"),
             "burst": nn_burst.with_gate("ssg", tb["ssg"], "GuardCode-Adaptive"),

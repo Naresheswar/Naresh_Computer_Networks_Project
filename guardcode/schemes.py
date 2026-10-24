@@ -9,6 +9,7 @@ be applied on top:
     gate = None   accept iff CRC passes                            (standard receiver)
     gate = 'llr'  ... and min |LLR| >= tau                          (classic threshold test)
     gate = 'ssg'  ... and Soft-Syndrome-Guard risk R(y) <= tau      (this invention)
+    gate = 'ml'   ... and learned gradient-boosted risk score <= tau (guardcode/mlguard.py)
 
 Line-up used in the experiments
     Uncoded+CRC            40 BPSK symbols
@@ -17,6 +18,7 @@ Line-up used in the experiments
     Neural+CRC             neural code, plain bit-metric training (ablation)
     Neural+CRC+LLR         neural code + classic min-|LLR| threshold test (prior-art style)
     GuardCode              neural code + Soft-Syndrome Guard (this invention)
+    GuardCode-ML           neural code + learned gradient-boosted risk classifier
 """
 import os
 
@@ -26,7 +28,9 @@ from .channels import sigma_from_ebno
 from .crc import CRC
 from .guard import SoftSyndromeGuard
 from .hamming import Hamming74
+from .mlguard import MLGuard, model_path
 from .model import NeuralCodeNP
+from . import mlguard
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS = os.path.join(ROOT, "models")
@@ -51,6 +55,7 @@ class Scheme:
     n = 40
     gate = None
     tau = None
+    ml = None                     # MLGuard instance, used when gate == 'ml'
 
     @property
     def rate(self):
@@ -63,10 +68,10 @@ class Scheme:
         """Return group posteriors (B, G, 2^m) over the 40 frame bits."""
         raise NotImplementedError
 
-    def with_gate(self, gate, tau, name):
+    def with_gate(self, gate, tau, name, ml=None):
         import copy
         s = copy.copy(self)
-        s.gate, s.tau, s.name = gate, tau, name
+        s.gate, s.tau, s.name, s.ml = gate, tau, name, ml
         return s
 
     def decide(self, y, h, ebno_db):
@@ -80,11 +85,15 @@ class Scheme:
         p1 = np.clip(P @ _VALUE_BITS[m].astype(np.float64), 1e-15, 1 - 1e-15).reshape(B, G * m)
         llr = np.abs(np.log(p1) - np.log1p(-p1)).min(axis=1)
         accept = crc_ok.copy()
+        extra = {}
         if self.gate == "llr":
             accept &= llr >= self.tau
         elif self.gate == "ssg":
             accept &= risk <= self.tau
-        return bits, accept, crc_ok, dict(llr=llr, risk=risk, p1=p1)
+        elif self.gate == "ml":
+            extra["ml"] = ml_score = self.ml.score(mlguard.features(self, P, risk, llr, y, h, bits))
+            accept &= ml_score <= self.tau
+        return bits, accept, crc_ok, dict(llr=llr, risk=risk, p1=p1, **extra)
 
 
 class Uncoded(Scheme):
@@ -151,4 +160,6 @@ def load_schemes(profile="awgn", models_profile=None):
         nb = NeuralScheme(base, "Neural+CRC")
         s += [nb, nb.with_gate("llr", th["llr"], "Neural+CRC+LLR"),
               nb.with_gate("ssg", th["ssg"], "GuardCode")]
+        if os.path.exists(model_path(mp)) and "ml" in th:
+            s.append(nb.with_gate("ml", th["ml"], "GuardCode-ML", ml=MLGuard.load(model_path(mp))))
     return s

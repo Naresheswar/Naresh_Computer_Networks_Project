@@ -3,6 +3,7 @@ const COLORS = {
   "Hamming+IL+CRC": "#1f77b4",
   "Neural+CRC": "#f79009",
   "GuardCode": "#d92d20",
+  "GuardCode-ML": "#7a5af8",
   "GuardCode-Adaptive": "#079455",
 };
 const $ = (id) => document.getElementById(id);

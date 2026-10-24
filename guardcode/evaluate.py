@@ -15,6 +15,7 @@ import numpy as np
 
 from .channels import ChannelConfig
 from .linksim import run_batch, simulate
+from .mlguard import model_path
 from .schemes import ROOT, crc, load_schemes, MODELS
 
 RESULTS = os.path.join(ROOT, "results")
@@ -32,6 +33,9 @@ def calibrate(profile, ebno=3.0, frr=0.01, n=200000, seed=11):
     if os.path.exists(base):
         nb = NeuralScheme(base, "cal")
         jobs += [("llr", nb, "llr"), ("ssg", nb, "risk")]
+        if os.path.exists(model_path(profile)):
+            from .mlguard import MLGuard
+            jobs.append(("ml", nb.with_gate("ml", 1.0, "cal", ml=MLGuard.load(model_path(profile))), "ml"))
     for key, s, score in jobs:
         rng = np.random.default_rng(seed)
         vals = []
@@ -85,6 +89,7 @@ STYLE = {
     "Neural+CRC": dict(color="#ff7f0e", marker="^", ls="-."),
     "Neural+CRC+LLR": dict(color="#9467bd", marker="v", ls="--"),
     "GuardCode": dict(color="#d62728", marker="o", ls="-"),
+    "GuardCode-ML": dict(color="#2ca02c", marker="P", ls="-"),
 }
 
 
@@ -134,7 +139,7 @@ def plot(rows=None):
         plt.close(fig)
     # undetected fraction bar chart (pooled over SNRs)
     fig, ax = plt.subplots(figsize=(10, 4.5))
-    width = 0.13
+    width = 0.12
     schemes = [s for s in STYLE if any(r["scheme"] == s for r in rows)]
     for i, sch in enumerate(schemes):
         vals = []
