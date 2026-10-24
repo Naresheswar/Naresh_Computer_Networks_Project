@@ -85,11 +85,11 @@ These numbers come from `results/benchmark.csv`: 300,000 frames per point, Eb/N0
 | AWGN | Neural + CRC | 1,559 |
 | AWGN | Neural + classic min-\|LLR\| test | 1,428 |
 | AWGN | **GuardCode (Neural + SSG)** | **742** (48% fewer than the LLR test) |
-| AWGN | **GuardCode-ML** (Neural + learned gradient-boosted gate) | **360** (51% fewer than GuardCode) |
+| AWGN | **GuardCode-ML** (Neural + learned gradient-boosted gate) | **324** (56% fewer than GuardCode) |
 | AWGN | Hamming + CRC → + SSG | 2,472 → 486 (80% fewer) |
 | Burst | Neural + classic min-\|LLR\| test | 3,054 |
 | Burst | **GuardCode** | **1,531** (50% fewer) |
-| Burst | **GuardCode-ML** | **1,183** (23% fewer than GuardCode) |
+| Burst | **GuardCode-ML** | **1,165** (24% fewer than GuardCode) |
 | Burst | Hamming + CRC → + SSG | 4,161 → 2,135 (49% fewer) |
 
 From 3 dB upward, ARQ goodput stays within about 1% of the unguarded receiver.
