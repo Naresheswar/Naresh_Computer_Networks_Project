@@ -2,3 +2,5 @@
 __pycache__/
 data/*.db*
 models/*.pt
+docs/build/node_modules/
+docs/build/package*.json
