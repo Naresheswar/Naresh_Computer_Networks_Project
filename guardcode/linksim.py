@@ -44,7 +44,7 @@ def simulate(scheme, crc, ebno_db, cfg, n_frames, batch=20000, seed=0):
         tot["crc_undetected"] += int((r["wrong"] & r["crc_ok"]).sum())
         tot["false_rej"] += int((r["outcome"] == FALSE_REJ).sum())
         # SSG self-estimate of undetected errors among accepted frames (no ground truth needed)
-        tot["est_undetected"] += float(r["risk"][r["accept"]].sum())
+        tot["est_undetected"] += float(r["risk"][r["accept"]].sum())   # NaN where the risk is not computed
         left -= B
     f = tot["frames"]
     tot.update(

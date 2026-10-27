@@ -51,7 +51,7 @@ def main():
         while left:
             B = min(5000, left)
             r = run_batch(s, crc(s.crc_name), e, ChannelConfig(prof), B, rng)
-            score = r["llr"] if s.gate == "llr" else r["risk"]
+            score = np.nan_to_num(r["llr"] if s.gate == "llr" else r["risk"], nan=-1.0)   # -1: not computed
             ts = base_ts + done / 1e4
             rows = [(run_id, ts, seq + j, s.name, prof, e, int(r["bit_err"][j]), int(r["outcome"][j]),
                      float(score[j]), 1) for j in range(B)]

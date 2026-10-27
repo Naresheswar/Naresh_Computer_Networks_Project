@@ -142,10 +142,10 @@ class LiveEngine(threading.Thread):
             wrong = (bits != fb).any(axis=1)
             out = np.where(wrong, np.where(accept, UNDETECTED, DETECTED), np.where(accept, OK, FALSE_REJ))
             be = (bits[:, :32] != msgs).sum(axis=1)
-            score = sc["risk"] if s.gate != "llr" else sc["llr"]
+            score = np.nan_to_num(sc["risk"] if s.gate != "llr" else sc["llr"], nan=-1.0)   # -1: not computed
             st = dict(frames=B, ok=int((out == OK).sum()), detected=int((out == DETECTED).sum()),
                       undetected=int((out == UNDETECTED).sum()), false_rej=int((out == FALSE_REJ).sum()),
-                      bit_err=int(be.sum()), est_ue=float(sc["risk"][accept].sum()))
+                      bit_err=int(be.sum()), est_ue=float(np.nansum(sc["risk"][accept])))
             c = self.cum[name]
             for k in c:
                 c[k] += st[k]

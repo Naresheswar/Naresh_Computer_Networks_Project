@@ -94,8 +94,13 @@ class Scheme:
         c = crc(self.crc_name)
         bits = _VALUE_BITS[m][P.argmax(axis=2)].reshape(B, G * m)
         crc_ok = c.check(bits)
-        # CRC-16: the 65,536-term risk is only needed where the CRC passes (1.0 elsewhere)
-        _, risk = ssg(self.crc_name).risk_groups(P, rows=crc_ok if c.r > 8 else None)
+        if c.r <= 8:
+            _, risk = ssg(self.crc_name).risk_groups(P)
+        elif self.gate in ("ssg", "ml"):
+            # CRC-16: the 65,536-term risk is only needed where the CRC passes (1.0 elsewhere)
+            _, risk = ssg(self.crc_name).risk_groups(P, rows=crc_ok)
+        else:
+            risk = np.full(B, np.nan)       # CRC-16 receivers without a guard: not computed
         p1 = np.clip(P @ _VALUE_BITS[m].astype(np.float64), 1e-15, 1 - 1e-15).reshape(B, G * m)
         llr = np.abs(np.log(p1) - np.log1p(-p1)).min(axis=1)
         accept = crc_ok.copy()

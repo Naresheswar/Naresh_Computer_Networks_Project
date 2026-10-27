@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS frames (
     ebno_db     REAL NOT NULL,
     bit_errors  INTEGER NOT NULL,        -- payload bit errors after decoding
     outcome     INTEGER NOT NULL,        -- 0 OK, 1 DETECTED, 2 UNDETECTED, 3 FALSE_REJECT
-    reliability REAL NOT NULL,           -- SSG residual risk R(y) (min |LLR| for the LLR-gated scheme)
+    reliability REAL NOT NULL,           -- SSG residual risk R(y) (min |LLR| for the LLR-gated scheme; -1 = not computed)
     attempt     INTEGER NOT NULL DEFAULT 1,  -- ARQ transmission attempt number
     crc         TEXT NOT NULL DEFAULT 'CRC-8'  -- CRC-8 | CRC-16
 );
