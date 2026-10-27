@@ -55,9 +55,9 @@ function table(rows, widths, opts = {}) {
 function build(blocks, outPath, { header } = {}) {
   const children = [];
   for (const b of blocks) {
-    if (b.h1) children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: b.h1 })] }));
-    else if (b.h2) children.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun({ text: b.h2 })] }));
-    else if (b.h3) children.push(new Paragraph({ heading: HeadingLevel.HEADING_3, children: [new TextRun({ text: b.h3 })] }));
+    if (b.h1) children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, keepNext: true, children: [new TextRun({ text: b.h1 })] }));
+    else if (b.h2) children.push(new Paragraph({ heading: HeadingLevel.HEADING_2, keepNext: true, children: [new TextRun({ text: b.h2 })] }));
+    else if (b.h3) children.push(new Paragraph({ heading: HeadingLevel.HEADING_3, keepNext: true, children: [new TextRun({ text: b.h3 })] }));
     else if (b.p !== undefined) children.push(new Paragraph({ alignment: b.align || AlignmentType.JUSTIFIED, spacing: { after: 120, line: 300 }, children: runs(b.p, b.style || {}) }));
     else if (b.center) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: b.after ?? 120, before: b.before ?? 0 }, children: runs(b.center, { size: b.size, bold: b.bold, italics: b.italics }) }));
     else if (b.bullets) b.bullets.forEach((t) => children.push(new Paragraph({ numbering: { reference: "bul", level: 0 }, spacing: { after: 60, line: 290 }, alignment: AlignmentType.JUSTIFIED, children: runs(t) })));
