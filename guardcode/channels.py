@@ -4,6 +4,8 @@ Channel models (real-valued, unit-energy symbols).
   * AWGN                      - memoryless thermal noise
   * Gilbert-Elliott (GE)      - two-state Markov burst-noise channel (Good / Bad)
   * Rayleigh block fading     - per-frame fading gain with perfect receiver CSI
+  * CRAWDAD                   - Gilbert-Elliott with burst timing and Bad-state noise rise
+                                fitted to real 802.15.4 error traces (guardcode/crawdad.py)
 
 Eb/N0 convention: every scheme is compared at the same energy per *information* bit.
 For a frame carrying k_info information bits in n channel symbols, Es/N0 = Eb/N0 * k_info/n
@@ -20,12 +22,22 @@ def sigma_from_ebno(ebno_db, rate):
     return np.sqrt(1.0 / (2.0 * esno))
 
 
+BURSTY = ("burst", "crawdad")     # channel kinds with Gilbert-Elliott noise states
+
+
 class ChannelConfig:
-    def __init__(self, kind="awgn", p_gb=0.03, p_bg=0.25, bad_extra_db=8.0):
-        self.kind = kind            # 'awgn' | 'burst' | 'fading'
+    def __init__(self, kind="awgn", p_gb=0.03, p_bg=0.25, bad_extra_db=8.0, crawdad_env=None):
+        self.kind = kind            # 'awgn' | 'burst' | 'fading' | 'crawdad'
         self.p_gb = p_gb            # P(Good -> Bad) per symbol
         self.p_bg = p_bg            # P(Bad -> Good) per symbol
         self.bad_extra_db = bad_extra_db  # extra noise power in Bad state
+        if kind == "crawdad":       # parameters measured from the real traces
+            from .crawdad import load_fit
+            fit = load_fit()
+            if fit is None:
+                raise FileNotFoundError("models/crawdad_ge.json missing - run scripts/fit_crawdad.py")
+            f = fit["environments"][crawdad_env] if crawdad_env else fit["pooled"]
+            self.p_gb, self.p_bg, self.bad_extra_db = f["p_gb"], f["p_bg"], f["bad_extra_db"]
 
     def to_dict(self):
         return dict(kind=self.kind, p_gb=self.p_gb, p_bg=self.p_bg, bad_extra_db=self.bad_extra_db)
@@ -45,7 +57,7 @@ def ge_states(B, n, p_gb, p_bg, rng):
 
 def noise_scale(B, n, cfg, rng):
     """Per-symbol noise multiplier (1 in Good, 10^(extra/20) in Bad)."""
-    if cfg.kind != "burst":
+    if cfg.kind not in BURSTY:
         return np.ones((B, n))
     st = ge_states(B, n, cfg.p_gb, cfg.p_bg, rng)
     return np.where(st, 10 ** (cfg.bad_extra_db / 20.0), 1.0)
@@ -79,7 +91,7 @@ try:
             ebno = ebno.expand(B)
         sigma = torch.sqrt(1.0 / (2.0 * (10 ** (ebno / 10.0)) * rate)).unsqueeze(1)
         scale = torch.ones_like(x)
-        if cfg.kind == "burst":
+        if cfg.kind in BURSTY:
             rng = np.random.default_rng(int(torch.randint(0, 2**31 - 1, (1,), generator=gen)))
             st = ge_states(B, n, cfg.p_gb, cfg.p_bg, rng)
             scale = torch.as_tensor(np.where(st, 10 ** (cfg.bad_extra_db / 20.0), 1.0), dtype=x.dtype, device=dev)

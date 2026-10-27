@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from guardcode.adaptive import AdaptiveController                       # noqa: E402
 from guardcode.channels import ChannelConfig, transmit_np                # noqa: E402
+from guardcode.crawdad import FIT_PATH                                   # noqa: E402
 from guardcode.db import Database                                        # noqa: E402
 from guardcode.linksim import DETECTED, FALSE_REJ, OK, UNDETECTED        # noqa: E402
 from guardcode.mlguard import MLGuard, model_path                         # noqa: E402
@@ -96,7 +97,8 @@ class LiveEngine(threading.Thread):
         with self.lock:
             if "ebno" in kw:
                 self.ebno = float(np.clip(float(kw["ebno"]), -2, 10))
-            if kw.get("channel") in ("awgn", "burst", "fading"):
+            if kw.get("channel") in ("awgn", "burst", "fading") or (
+                    kw.get("channel") == "crawdad" and os.path.exists(FIT_PATH)):
                 self.channel = kw["channel"]
             if "paused" in kw:
                 self.paused = bool(kw["paused"])

@@ -173,10 +173,13 @@ def neural_path(profile, crc_name=CRC_NAME):
 
 
 def load_schemes(profile="awgn", models_profile=None, crc_name=CRC_NAME):
-    """Ordered line-up for a channel profile ('awgn' | 'burst' | 'fading') and CRC ('CRC-8' | 'CRC-16')."""
-    mp = models_profile or ("burst" if profile == "burst" else "awgn")
+    """Ordered line-up for a channel profile ('awgn' | 'burst' | 'fading' | 'crawdad') and CRC
+    ('CRC-8' | 'CRC-16'). The measured 'crawdad' channel is a test channel: it reuses the burst
+    profile's codes and thresholds, which were never tuned on the real traces."""
+    bursty = profile in ("burst", "crawdad")
+    mp = models_profile or ("burst" if bursty else "awgn")
     th = thresholds(mp, crc_name)
-    ham = HammingScheme(interleave=(profile == "burst"), crc_name=crc_name)
+    ham = HammingScheme(interleave=bursty, crc_name=crc_name)
     s = [Uncoded(crc_name), ham, ham.with_gate("ssg", th["ssg_hamming"], "Hamming+CRC+SSG")]
     base = neural_path(mp, crc_name)
     if os.path.exists(base):

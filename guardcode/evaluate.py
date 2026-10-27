@@ -5,6 +5,7 @@ and every data point also stored in the SQLite database (table `benchmark`).
     python -m guardcode.evaluate --frames 200000          (quick)
     python -m guardcode.evaluate --frames 2000000         (report quality)
     python -m guardcode.evaluate --crc CRC-16             (CRC-16 line-up -> results/benchmark_crc16.csv)
+    python -m guardcode.evaluate --profiles crawdad       (real 802.15.4 burst statistics, scripts/fit_crawdad.py first)
 """
 import argparse
 import csv
@@ -57,8 +58,12 @@ def sweep(profiles=("awgn", "burst"), ebnos=None, frames=200000, db=True, crc_na
     c = crc(crc_name)
     rows = []
     for prof in profiles:
-        thr = calibrate(prof, crc_name=crc_name)
-        print(f"[{prof}] {crc_name} calibrated gate thresholds (1% false-reject at 3 dB): {thr}", flush=True)
+        if prof == "crawdad":   # measured test channel: keep the burst profile's thresholds untouched
+            from .schemes import thresholds
+            print(f"[crawdad] {crc_name} using burst-profile thresholds: {thresholds('burst', crc_name)}", flush=True)
+        else:
+            thr = calibrate(prof, crc_name=crc_name)
+            print(f"[{prof}] {crc_name} calibrated gate thresholds (1% false-reject at 3 dB): {thr}", flush=True)
         for s in load_schemes(prof, crc_name=crc_name):
             for e in ebnos:
                 t0 = time.time()
