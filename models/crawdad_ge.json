@@ -1,0 +1,284 @@
+{
+ "source": "CRAWDAD niit/bit_errors (IEEE DataPort, DOI 10.15783/C7S88K), 802.15.4 traces",
+ "bits": 104141120,
+ "n_traces": 22,
+ "pooled": {
+  "p_gb": 0.002101491375847397,
+  "p_bg": 0.24409142407501985,
+  "e_good": 6.122900724023418e-09,
+  "e_bad": 0.5,
+  "loglik": -1861580.2268693608,
+  "bad_share": 0.00853595389615016,
+  "mean_bad_run": 4.096825620930692,
+  "mean_good_run": 475.8525357244276,
+  "bad_extra_db": 20.0
+ },
+ "environments": {
+  "OutRoom": {
+   "p_gb": 0.00024383330369210257,
+   "p_bg": 0.24734637565836903,
+   "e_good": 1e-09,
+   "e_bad": 0.488856635781147,
+   "loglik": -94065.75908601921,
+   "bad_share": 0.0009848261153552554,
+   "mean_bad_run": 4.042913494641961,
+   "mean_good_run": 4101.16249445046,
+   "bad_extra_db": 20.0
+  },
+  "PhdLab": {
+   "p_gb": 0.00386528516876449,
+   "p_bg": 0.2637054595323056,
+   "e_good": 2.482772354881261e-08,
+   "e_bad": 0.5,
+   "loglik": -782547.3092865617,
+   "bad_share": 0.014445843745297282,
+   "mean_bad_run": 3.7921095823103106,
+   "mean_good_run": 258.71312369939386,
+   "bad_extra_db": 20.0
+  },
+  "Stair": {
+   "p_gb": 0.0030820391018532077,
+   "p_bg": 0.25471130559774097,
+   "e_good": 1.267903537540658e-08,
+   "e_bad": 0.5,
+   "loglik": -389171.51256126555,
+   "bad_share": 0.011955464193401495,
+   "mean_bad_run": 3.9260134042863193,
+   "mean_good_run": 324.4605168697267,
+   "bad_extra_db": 20.0
+  },
+  "Up_Floor": {
+   "p_gb": 0.002612407762468096,
+   "p_bg": 0.2204335475113913,
+   "e_good": 1e-09,
+   "e_bad": 0.48887194201940687,
+   "loglik": -539901.9630098082,
+   "bad_share": 0.01171241934990724,
+   "mean_bad_run": 4.536514569989957,
+   "mean_good_run": 382.7886344416773,
+   "bad_extra_db": 20.0
+  }
+ },
+ "traces": [
+  {
+   "trace": "OutRoom_1_5m.txt",
+   "environment": "OutRoom",
+   "frames": 44824,
+   "p_gb": 0.00021727348514961225,
+   "p_bg": 0.2363369287480665,
+   "e_good": 1e-09,
+   "e_bad": 0.015787970663323225,
+   "bad_extra_db": 6.892420809494414
+  },
+  {
+   "trace": "OutRoom_2_5m.txt",
+   "environment": "OutRoom",
+   "frames": 31514,
+   "p_gb": 0.0005794302008069951,
+   "p_bg": 0.3066724364771564,
+   "e_good": 1e-09,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "OutRoom_3_8m.txt",
+   "environment": "OutRoom",
+   "frames": 35913,
+   "p_gb": 0.000499897407319722,
+   "p_bg": 0.22323216039300206,
+   "e_good": 1e-09,
+   "e_bad": 0.4683459079474575,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "OutRoom_4_7m.txt",
+   "environment": "OutRoom",
+   "frames": 32374,
+   "p_gb": 0.0005741099707622378,
+   "p_bg": 0.24888834784365826,
+   "e_good": 1e-09,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "OutRoom_5_8m.txt",
+   "environment": "OutRoom",
+   "frames": 32406,
+   "p_gb": 9.924745978963956e-05,
+   "p_bg": 0.10939783460866169,
+   "e_good": 1e-09,
+   "e_bad": 0.2381040593659922,
+   "bad_extra_db": 16.48547624927634
+  },
+  {
+   "trace": "OutRoom_6_5m.txt",
+   "environment": "OutRoom",
+   "frames": 34069,
+   "p_gb": 0.0007709922460381029,
+   "p_bg": 0.243242957358879,
+   "e_good": 1e-09,
+   "e_bad": 0.00017418309168442444,
+   "bad_extra_db": 3.0
+  },
+  {
+   "trace": "OutRoom_7_5m.txt",
+   "environment": "OutRoom",
+   "frames": 26404,
+   "p_gb": 0.000298070341582715,
+   "p_bg": 0.2531924834550628,
+   "e_good": 1e-09,
+   "e_bad": 0.01187691830496756,
+   "bad_extra_db": 6.453784109384435
+  },
+  {
+   "trace": "PhdLab_1_8m.txt",
+   "environment": "PhdLab",
+   "frames": 24096,
+   "p_gb": 0.005915123702537119,
+   "p_bg": 0.2632818826826797,
+   "e_good": 2.1292628786708228e-08,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "PhdLab_2_7m.txt",
+   "environment": "PhdLab",
+   "frames": 40709,
+   "p_gb": 0.0021126007877455147,
+   "p_bg": 0.24554132156177677,
+   "e_good": 1.3151616827739063e-08,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "PhdLab_3_8m.txt",
+   "environment": "PhdLab",
+   "frames": 54066,
+   "p_gb": 0.00040836592072305335,
+   "p_bg": 0.1292665345009409,
+   "e_good": 1e-09,
+   "e_bad": 0.30562430545162905,
+   "bad_extra_db": 19.417866931347326
+  },
+  {
+   "trace": "PhdLab_4_7m.txt",
+   "environment": "PhdLab",
+   "frames": 46563,
+   "p_gb": 0.008627449254503766,
+   "p_bg": 0.2796784309997929,
+   "e_good": 3.493292084610129e-08,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "Stair_1_5m.txt",
+   "environment": "Stair",
+   "frames": 50834,
+   "p_gb": 2.6205153117682657e-05,
+   "p_bg": 0.06833921966503856,
+   "e_good": 1e-09,
+   "e_bad": 0.16037636278159093,
+   "bad_extra_db": 13.60191438956964
+  },
+  {
+   "trace": "Stair_2_5m.txt",
+   "environment": "Stair",
+   "frames": 19872,
+   "p_gb": 0.01553406835949848,
+   "p_bg": 0.27930554047057987,
+   "e_good": 1.0721144336671038e-07,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "Stair_4_5m.txt",
+   "environment": "Stair",
+   "frames": 11605,
+   "p_gb": 0.0011135975513393251,
+   "p_bg": 0.22199978142344362,
+   "e_good": 1e-09,
+   "e_bad": 0.48243312196161325,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "Stair_6_5m.txt",
+   "environment": "Stair",
+   "frames": 16492,
+   "p_gb": 0.0006517547329399733,
+   "p_bg": 0.26326389981502996,
+   "e_good": 1e-09,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "Up_Floor_1_12m.txt",
+   "environment": "Up_Floor",
+   "frames": 23027,
+   "p_gb": 0.01918498415278006,
+   "p_bg": 0.26099896159909874,
+   "e_good": 1.0707660055552287e-07,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "Up_Floor_2_12m.txt",
+   "environment": "Up_Floor",
+   "frames": 8424,
+   "p_gb": 0.00015317109684105356,
+   "p_bg": 0.24899016461322196,
+   "e_good": 1e-09,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "Up_Floor_3_12m.txt",
+   "environment": "Up_Floor",
+   "frames": 21561,
+   "p_gb": 0.00012722706878005567,
+   "p_bg": 0.25484447671127264,
+   "e_good": 1e-09,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  },
+  {
+   "trace": "Up_Floor_4_12m.txt",
+   "environment": "Up_Floor",
+   "frames": 21710,
+   "p_gb": 9.757021045704193e-06,
+   "p_bg": 0.0030174954796947347,
+   "e_good": 1.1064256559873572e-06,
+   "e_bad": 0.031366641207473386,
+   "bad_extra_db": 8.107342173913665
+  },
+  {
+   "trace": "Up_Floor_5_12m.txt",
+   "environment": "Up_Floor",
+   "frames": 22148,
+   "p_gb": 4.464240569952023e-05,
+   "p_bg": 0.06166605278993795,
+   "e_good": 1e-09,
+   "e_bad": 0.16773538874412733,
+   "bad_extra_db": 13.866226560218548
+  },
+  {
+   "trace": "Up_Floor_6_12m.txt",
+   "environment": "Up_Floor",
+   "frames": 29378,
+   "p_gb": 2.8868885377812398e-05,
+   "p_bg": 0.0359723877473097,
+   "e_good": 1e-09,
+   "e_bad": 0.11445232313846342,
+   "bad_extra_db": 11.933481761753953
+  },
+  {
+   "trace": "Up_Floor_7_12m.txt",
+   "environment": "Up_Floor",
+   "frames": 22893,
+   "p_gb": 0.0002389197836674318,
+   "p_bg": 0.2871355600895571,
+   "e_good": 1e-09,
+   "e_bad": 0.5,
+   "bad_extra_db": 20.0
+  }
+ ]
+}

@@ -31,6 +31,7 @@ class ChannelConfig:
         self.p_gb = p_gb            # P(Good -> Bad) per symbol
         self.p_bg = p_bg            # P(Bad -> Good) per symbol
         self.bad_extra_db = bad_extra_db  # extra noise power in Bad state
+        self.mixture = None         # crawdad: one fitted model per measured trace
         if kind == "crawdad":       # parameters measured from the real traces
             from .crawdad import load_fit
             fit = load_fit()
@@ -38,13 +39,20 @@ class ChannelConfig:
                 raise FileNotFoundError("models/crawdad_ge.json missing - run scripts/fit_crawdad.py")
             f = fit["environments"][crawdad_env] if crawdad_env else fit["pooled"]
             self.p_gb, self.p_bg, self.bad_extra_db = f["p_gb"], f["p_bg"], f["bad_extra_db"]
+            mix = [t for t in fit.get("traces", []) if crawdad_env in (None, t["environment"])]
+            if mix:                 # every frame draws one real trace (weighted by its frame count)
+                w = np.array([t["frames"] for t in mix], dtype=np.float64)
+                self.mixture = (w / w.sum(), np.array([t["p_gb"] for t in mix]),
+                                np.array([t["p_bg"] for t in mix]), np.array([t["bad_extra_db"] for t in mix]))
 
     def to_dict(self):
         return dict(kind=self.kind, p_gb=self.p_gb, p_bg=self.p_bg, bad_extra_db=self.bad_extra_db)
 
 
 def ge_states(B, n, p_gb, p_bg, rng):
-    """Sample Gilbert-Elliott state sequences, (B, n) bool, True = Bad."""
+    """Sample Gilbert-Elliott state sequences, (B, n) bool, True = Bad.
+    p_gb, p_bg: scalars or per-frame arrays of shape (B,)."""
+    p_gb, p_bg = np.asarray(p_gb, dtype=np.float64), np.asarray(p_bg, dtype=np.float64)
     pi_bad = p_gb / (p_gb + p_bg)
     s = np.empty((B, n), dtype=bool)
     s[:, 0] = rng.random(B) < pi_bad
@@ -59,6 +67,11 @@ def noise_scale(B, n, cfg, rng):
     """Per-symbol noise multiplier (1 in Good, 10^(extra/20) in Bad)."""
     if cfg.kind not in BURSTY:
         return np.ones((B, n))
+    if getattr(cfg, "mixture", None) is not None:
+        w, pgb, pbg, extra = cfg.mixture
+        k = rng.choice(len(w), size=B, p=w)
+        st = ge_states(B, n, pgb[k], pbg[k], rng)
+        return np.where(st, (10 ** (extra[k] / 20.0))[:, None], 1.0)
     st = ge_states(B, n, cfg.p_gb, cfg.p_bg, rng)
     return np.where(st, 10 ** (cfg.bad_extra_db / 20.0), 1.0)
 

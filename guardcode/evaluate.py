@@ -76,11 +76,14 @@ def sweep(profiles=("awgn", "burst"), ebnos=None, frames=200000, db=True, crc_na
     keys = ["profile", "crc", "scheme", "ebno_db", "n_sym", "rate", "frames", "bit_errors", "frame_errors",
             "detected", "undetected", "crc_undetected", "est_undetected", "false_rej", "ber", "fer", "uer",
             "reject_rate", "goodput", "seconds"]
-    with open(os.path.join(RESULTS, f"benchmark{suffix(crc_name)}.csv"), "w", newline="") as f:
+    # merge: rows of channel profiles not simulated in this run are kept as they were
+    path = os.path.join(RESULTS, f"benchmark{suffix(crc_name)}.csv")
+    kept = [r for r in load_csv(crc_name) if r["profile"] not in profiles] if os.path.exists(path) else []
+    with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, keys)
         w.writeheader()
-        for r in rows:
-            w.writerow({k: r[k] for k in keys})
+        for r in kept + rows:
+            w.writerow({k: r.get(k, crc_name if k == "crc" else "") for k in keys})
     if db:
         from .db import Database
         d = Database()
@@ -214,8 +217,8 @@ if __name__ == "__main__":
         Database().insert_benchmark(rows)
         print(f"imported {len(rows)} benchmark rows into the database")
         raise SystemExit(0)
-    rows = sweep(a.profiles.split(","), frames=a.frames, db=not a.no_db, crc_name=a.crc)
-    plot(rows, a.crc)
+    sweep(a.profiles.split(","), frames=a.frames, db=not a.no_db, crc_name=a.crc)
+    plot(load_csv(a.crc), a.crc)
     if a.crc == "CRC-8":
         plot_training()
     print("done ->", RESULTS)
