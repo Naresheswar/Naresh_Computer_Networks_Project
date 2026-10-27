@@ -4,6 +4,7 @@ and every data point also stored in the SQLite database (table `benchmark`).
 
     python -m guardcode.evaluate --frames 200000          (quick)
     python -m guardcode.evaluate --frames 2000000         (report quality)
+    python -m guardcode.evaluate --crc CRC-16             (CRC-16 line-up -> results/benchmark_crc16.csv)
 """
 import argparse
 import csv
@@ -16,26 +17,26 @@ import numpy as np
 from .channels import ChannelConfig
 from .linksim import run_batch, simulate
 from .mlguard import model_path
-from .schemes import ROOT, crc, load_schemes, MODELS
+from .schemes import ROOT, crc, load_schemes, MODELS, neural_path, suffix
 
 RESULTS = os.path.join(ROOT, "results")
 
 
-def calibrate(profile, ebno=3.0, frr=0.01, n=200000, seed=11):
+def calibrate(profile, ebno=3.0, frr=0.01, n=200000, seed=11, crc_name="CRC-8"):
     """Calibrate the gates so that each rejects the same share (frr) of CORRECTLY decoded
     frames at the calibration Eb/N0 - i.e. both gates get the same retransmission budget."""
     from .schemes import HammingScheme, NeuralScheme
-    c = crc()
+    c = crc(crc_name)
     cfg = ChannelConfig(profile)
     out = {}
-    jobs = [("ssg_hamming", HammingScheme(interleave=(profile == "burst")), "risk")]
-    base = os.path.join(MODELS, f"base_{profile}.npz")
+    jobs = [("ssg_hamming", HammingScheme(interleave=(profile == "burst"), crc_name=crc_name), "risk")]
+    base = neural_path(profile, crc_name)
     if os.path.exists(base):
         nb = NeuralScheme(base, "cal")
         jobs += [("llr", nb, "llr"), ("ssg", nb, "risk")]
-        if os.path.exists(model_path(profile)):
+        if os.path.exists(model_path(profile, crc_name)):
             from .mlguard import MLGuard
-            jobs.append(("ml", nb.with_gate("ml", 1.0, "cal", ml=MLGuard.load(model_path(profile))), "ml"))
+            jobs.append(("ml", nb.with_gate("ml", 1.0, "cal", ml=MLGuard.load(model_path(profile, crc_name))), "ml"))
     for key, s, score in jobs:
         rng = np.random.default_rng(seed)
         vals = []
@@ -44,33 +45,33 @@ def calibrate(profile, ebno=3.0, frr=0.01, n=200000, seed=11):
             vals.append(r[score][~r["wrong"]])
         v = np.concatenate(vals)
         out[key] = float(np.quantile(v, frr)) if score == "llr" else float(np.quantile(v, 1 - frr))
-    with open(os.path.join(MODELS, f"thresholds_{profile}.txt"), "w") as f:
+    with open(os.path.join(MODELS, f"thresholds_{profile}{suffix(crc_name)}.txt"), "w") as f:
         for k, v in out.items():
             f.write(f"{k}={v:.8g}\n")
     return out
 
 
-def sweep(profiles=("awgn", "burst"), ebnos=None, frames=200000, db=True):
+def sweep(profiles=("awgn", "burst"), ebnos=None, frames=200000, db=True, crc_name="CRC-8"):
     os.makedirs(RESULTS, exist_ok=True)
     ebnos = ebnos if ebnos is not None else [0, 1, 2, 3, 4, 5, 6, 7]
-    c = crc()
+    c = crc(crc_name)
     rows = []
     for prof in profiles:
-        thr = calibrate(prof)
-        print(f"[{prof}] calibrated gate thresholds (1% false-reject at 3 dB): {thr}", flush=True)
-        for s in load_schemes(prof):
+        thr = calibrate(prof, crc_name=crc_name)
+        print(f"[{prof}] {crc_name} calibrated gate thresholds (1% false-reject at 3 dB): {thr}", flush=True)
+        for s in load_schemes(prof, crc_name=crc_name):
             for e in ebnos:
                 t0 = time.time()
                 r = simulate(s, c, e, ChannelConfig(prof), frames, seed=1000 + int(e * 10))
-                r.update(profile=prof, scheme=s.name, ebno_db=e, n_sym=s.n, rate=round(s.rate, 4),
+                r.update(profile=prof, scheme=s.name, ebno_db=e, n_sym=s.n, rate=round(s.rate, 4), crc=crc_name,
                          seconds=round(time.time() - t0, 2))
                 rows.append(r)
                 print(f"{prof:5s} {s.name:15s} {e:4.1f} dB  BER {r['ber']:.2e}  FER {r['fer']:.2e}  "
                       f"UER {r['uer']:.2e} ({r['undetected']})  goodput {r['goodput']:.3f}", flush=True)
-    keys = ["profile", "scheme", "ebno_db", "n_sym", "rate", "frames", "bit_errors", "frame_errors",
+    keys = ["profile", "crc", "scheme", "ebno_db", "n_sym", "rate", "frames", "bit_errors", "frame_errors",
             "detected", "undetected", "crc_undetected", "est_undetected", "false_rej", "ber", "fer", "uer",
             "reject_rate", "goodput", "seconds"]
-    with open(os.path.join(RESULTS, "benchmark.csv"), "w", newline="") as f:
+    with open(os.path.join(RESULTS, f"benchmark{suffix(crc_name)}.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, keys)
         w.writeheader()
         for r in rows:
@@ -93,17 +94,25 @@ STYLE = {
 }
 
 
-def plot(rows=None):
+def load_csv(crc_name="CRC-8"):
+    with open(os.path.join(RESULTS, f"benchmark{suffix(crc_name)}.csv")) as f:
+        rows = list(csv.DictReader(f))
+    for r in rows:
+        r.setdefault("crc", crc_name)
+        for k in r:
+            if k not in ("profile", "scheme", "crc"):
+                r[k] = float(r[k])
+    return rows
+
+
+def plot(rows=None, crc_name="CRC-8"):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     if rows is None:
-        with open(os.path.join(RESULTS, "benchmark.csv")) as f:
-            rows = list(csv.DictReader(f))
-        for r in rows:
-            for k in r:
-                if k not in ("profile", "scheme"):
-                    r[k] = float(r[k])
+        rows = load_csv(crc_name)
+    sfx = suffix(crc_name)
+    n_sym = 70 if crc_name == "CRC-8" else 84
     profiles = sorted({r["profile"] for r in rows})
     metrics = [("ber", "Bit error rate (info bits)", True), ("fer", "Frame error rate", True),
                ("uer", "Undetected frame error rate", True), ("goodput", "ARQ goodput (info bits / channel use)", False)]
@@ -132,10 +141,10 @@ def plot(rows=None):
                 ax.set_yscale("log")
             ax.grid(True, which="both", alpha=0.3)
         axes[0, 0].legend(fontsize=8)
-        fig.suptitle(f"GuardCode benchmark - {prof.upper()} channel (32-bit payload, CRC-8, 70 coded symbols)"
+        fig.suptitle(f"GuardCode benchmark - {prof.upper()} channel (32-bit payload, {crc_name}, {n_sym} coded symbols)"
                      + ("\n(hollow triangles: zero undetected errors observed, drawn at 1/N)" ), fontsize=11)
         fig.tight_layout()
-        fig.savefig(os.path.join(RESULTS, f"benchmark_{prof}.png"), dpi=150)
+        fig.savefig(os.path.join(RESULTS, f"benchmark_{prof}{sfx}.png"), dpi=150)
         plt.close(fig)
     # undetected fraction bar chart (pooled over SNRs)
     fig, ax = plt.subplots(figsize=(10, 4.5))
@@ -157,7 +166,7 @@ def plot(rows=None):
     ax.legend(fontsize=8)
     ax.grid(True, axis="y", which="both", alpha=0.3)
     fig.tight_layout()
-    fig.savefig(os.path.join(RESULTS, "undetected_share.png"), dpi=150)
+    fig.savefig(os.path.join(RESULTS, f"undetected_share{sfx}.png"), dpi=150)
     plt.close(fig)
 
 
@@ -190,21 +199,18 @@ if __name__ == "__main__":
     ap.add_argument("--frames", type=int, default=200000)
     ap.add_argument("--profiles", default="awgn,burst")
     ap.add_argument("--no-db", action="store_true")
+    ap.add_argument("--crc", default="CRC-8", choices=["CRC-8", "CRC-16"])
     ap.add_argument("--import-csv", action="store_true",
-                    help="load an existing results/benchmark.csv into the database instead of re-simulating")
+                    help="load an existing results/benchmark[_crc16].csv into the database instead of re-simulating")
     a = ap.parse_args()
     if a.import_csv:
         from .db import Database
-        with open(os.path.join(RESULTS, "benchmark.csv")) as f:
-            rows = list(csv.DictReader(f))
-        for r in rows:
-            for k in r:
-                if k not in ("profile", "scheme"):
-                    r[k] = float(r[k])
+        rows = load_csv(a.crc)
         Database().insert_benchmark(rows)
         print(f"imported {len(rows)} benchmark rows into the database")
         raise SystemExit(0)
-    rows = sweep(a.profiles.split(","), frames=a.frames, db=not a.no_db)
-    plot(rows)
-    plot_training()
+    rows = sweep(a.profiles.split(","), frames=a.frames, db=not a.no_db, crc_name=a.crc)
+    plot(rows, a.crc)
+    if a.crc == "CRC-8":
+        plot_training()
     print("done ->", RESULTS)

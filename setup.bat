@@ -24,6 +24,7 @@ set VPY=.venv\Scripts\python.exe
 echo [2/5] Installing dependencies (torch is large - a few minutes)...
 %VPY% -m pip install --upgrade pip
 %VPY% -m pip install numpy flask matplotlib scikit-learn joblib || goto :err
+%VPY% -m pip install numba || echo numba is optional - it only speeds up the CRC-16 guard
 %VPY% -m pip install torch || echo torch is optional - only needed to retrain the models
 echo [3/5] Benchmark sweep (skipped if results are already present)...
 if exist results\benchmark.csv (

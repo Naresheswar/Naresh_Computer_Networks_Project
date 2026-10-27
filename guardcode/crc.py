@@ -20,7 +20,8 @@ CRC_POLYS = {
     "CRC-4-ITU": (4, 0x3),        # x^4 + x + 1
     "CRC-8": (8, 0x07),           # x^8 + x^2 + x + 1   (CRC-8/SMBUS, ATM HEC)
     "CRC-8-CCITT": (8, 0x07),
-    "CRC-16-CCITT": (16, 0x1021), # x^16 + x^12 + x^5 + 1  (HDLC / X.25 / Bluetooth)
+    "CRC-16": (16, 0x1021),       # x^16 + x^12 + x^5 + 1  (CRC-16/CCITT: HDLC / X.25 / Bluetooth)
+    "CRC-16-CCITT": (16, 0x1021),
 }
 
 
@@ -118,3 +119,8 @@ if __name__ == "__main__":
     f[0, 3] ^= 1
     print("check after 1 flip:", c.check(f))
     print("CRC-8 Hamming distance on 40-bit frames:", c.min_distance())
+    c16 = CRC(32, "CRC-16")
+    f16 = c16.encode(m)
+    assert c16.check(f16).all()
+    assert all((c16.encode(row[None])[0, 32:] == crc_bits_reference(row, 16, 0x1021)).all() for row in m)
+    print("CRC-16 Hamming distance on 48-bit frames:", c16.min_distance())

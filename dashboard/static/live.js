@@ -65,6 +65,8 @@ function render(s) {
   $("ebnoVal").textContent = s.ebno.toFixed(2);
   if (document.activeElement !== $("ebno")) $("ebno").value = s.ebno;
   document.querySelectorAll("#chanSeg button").forEach((b) => b.classList.toggle("on", b.dataset.ch === s.channel));
+  document.querySelectorAll("#crcSeg button").forEach((b) => b.classList.toggle("on", b.dataset.crc === s.crc));
+  $("crcVal").textContent = s.crc;
   const pill = $("runPill");
   pill.className = "pill" + (s.running ? (s.storm_left ? " storm" : "") : " off");
   pill.textContent = s.running ? (s.storm_left ? `burst storm ${s.storm_left}s` : "running") : "paused";
@@ -105,6 +107,13 @@ function post(body) {
 $("ebno").addEventListener("input", (e) => ($("ebnoVal").textContent = (+e.target.value).toFixed(2)));
 $("ebno").addEventListener("change", (e) => post({ ebno: +e.target.value }));
 document.querySelectorAll("#chanSeg button").forEach((b) => b.addEventListener("click", () => post({ channel: b.dataset.ch })));
+// switching the CRC changes the line-up, so the chart series are rebuilt from scratch
+document.querySelectorAll("#crcSeg button").forEach((b) => b.addEventListener("click", () => {
+  for (const c of [...Object.values(charts), cB]) { c.data.labels = []; c.data.datasets.forEach((d) => (d.data = [])); }
+  for (const c of Object.values(charts)) { c.data.datasets = []; c.update(); }
+  cB.update();
+  post({ crc: b.dataset.crc });
+}));
 $("rate").addEventListener("change", (e) => post({ rate: +e.target.value }));
 $("storm").addEventListener("click", () => post({ storm: true }));
 $("pause").addEventListener("click", () => post({ paused: $("pause").textContent === "Pause" }));
@@ -126,7 +135,7 @@ fetch("/api/history").then((r) => r.json()).then((h) => {
 // keep explanatory text in sync even if an older cached template is served
 (() => {
   const tag = document.querySelector(".tag");
-  if (tag) tag.innerHTML = "Soft-Syndrome Guard on a CRC-8 protected neural FEC link &middot; 32-bit payload &middot; every frame logged to SQLite";
+  if (tag) tag.innerHTML = "Soft-Syndrome Guard on a CRC-8 / CRC-16 protected neural FEC link &middot; 32-bit payload &middot; every frame logged to SQLite";
   const note = document.querySelector(".note");
-  if (note) note.innerHTML = "An <b>undetected</b> frame is decoded wrongly but still passes the receiver checks, so corrupted data reaches the application. GuardCode's Soft-Syndrome Guard computes, for every frame that passes CRC-8, the probability that it is still wrong, and sends risky frames back for retransmission &mdash; no extra bits, unmodified CRC.";
+  if (note) note.innerHTML = "An <b>undetected</b> frame is decoded wrongly but still passes the receiver checks, so corrupted data reaches the application. GuardCode's Soft-Syndrome Guard computes, for every frame that passes the CRC, the probability that it is still wrong, and sends risky frames back for retransmission &mdash; no extra bits, unmodified CRC.";
 })();

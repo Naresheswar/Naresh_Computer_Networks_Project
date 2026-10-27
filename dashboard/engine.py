@@ -20,8 +20,8 @@ from guardcode.channels import ChannelConfig, transmit_np                # noqa:
 from guardcode.db import Database                                        # noqa: E402
 from guardcode.linksim import DETECTED, FALSE_REJ, OK, UNDETECTED        # noqa: E402
 from guardcode.mlguard import MLGuard, model_path                         # noqa: E402
-from guardcode.schemes import (MODELS, HammingScheme, NeuralScheme,      # noqa: E402
-                               Uncoded, crc, thresholds)
+from guardcode.schemes import (CRC_CHOICES, HammingScheme, NeuralScheme,  # noqa: E402
+                               Uncoded, crc, neural_path, thresholds)
 
 HISTORY = 240          # chart points kept in memory
 WINDOW = 20            # ticks in the rolling window
@@ -38,34 +38,9 @@ class LiveEngine(threading.Thread):
         self.channel = "awgn"
         self.paused = False
         self.storm_until = 0.0
-        self.crc = crc()
         self.rng = np.random.default_rng()
         self.lock = threading.RLock()
-
-        ta, tb = thresholds("awgn"), thresholds("burst")
-        ham = HammingScheme(interleave=True, name="Hamming+CRC")
-        nn_awgn = NeuralScheme(os.path.join(MODELS, "base_awgn.npz"), "Neural+CRC")
-        nn_burst = NeuralScheme(os.path.join(MODELS, "base_burst.npz"), "Neural+CRC")
-        self.schemes = [
-            Uncoded(),
-            ham,
-            ham.with_gate("ssg", ta["ssg_hamming"], "Hamming+CRC+SSG"),
-            nn_awgn.with_gate("llr", ta["llr"], "Neural+CRC+LLR"),
-            nn_awgn.with_gate("ssg", ta["ssg"], "GuardCode"),
-        ]
-        if os.path.exists(model_path("awgn")) and "ml" in ta:
-            self.schemes.append(nn_awgn.with_gate("ml", ta["ml"], "GuardCode-ML", ml=MLGuard.load(model_path("awgn"))))
-        self.adaptive = AdaptiveController({
-            "awgn": nn_awgn.with_gate("ssg", ta["ssg"], "GuardCode-Adaptive"),
-            "burst": nn_burst.with_gate("ssg", tb["ssg"], "GuardCode-Adaptive"),
-        })
-        self.adaptive_ml = None
-        if all(os.path.exists(model_path(m)) and "ml" in t for m, t in (("awgn", ta), ("burst", tb))):
-            self.adaptive_ml = AdaptiveController({
-                m: nn.with_gate("ml", t["ml"], "GuardCode-ML-Adaptive", ml=MLGuard.load(model_path(m)))
-                for m, nn, t in (("awgn", nn_awgn, ta), ("burst", nn_burst, tb))})
-        self.names = [s.name for s in self.schemes] + ["GuardCode-Adaptive"] + (
-            ["GuardCode-ML-Adaptive"] if self.adaptive_ml else [])
+        self.build("CRC-8")
         self.reset_stats()
         self.con = db.connect()
         self.run_id = db.new_run("live", "dashboard session", self.con)
@@ -73,6 +48,39 @@ class LiveEngine(threading.Thread):
         self.rows_total = self.con.execute("SELECT COALESCE(MAX(id),0) FROM frames").fetchone()[0]
         self.insert_rate = 0.0
         self.last_bidx = 0.0
+
+    def build(self, crc_name):
+        """(Re)build the line-up for a CRC. CRC-16 rows need the *_crc16 models (train_all.py --crc CRC-16)."""
+        self.crc_name = crc_name
+        self.crc = crc(crc_name)
+        ta, tb = thresholds("awgn", crc_name), thresholds("burst", crc_name)
+        ham = HammingScheme(interleave=True, name="Hamming+CRC", crc_name=crc_name)
+        self.schemes = [
+            Uncoded(crc_name),
+            ham,
+            ham.with_gate("ssg", ta["ssg_hamming"], "Hamming+CRC+SSG"),
+        ]
+        self.adaptive = self.adaptive_ml = None
+        pa, pb = neural_path("awgn", crc_name), neural_path("burst", crc_name)
+        if os.path.exists(pa):
+            nn_awgn = NeuralScheme(pa, "Neural+CRC")
+            self.schemes += [nn_awgn.with_gate("llr", ta["llr"], "Neural+CRC+LLR"),
+                             nn_awgn.with_gate("ssg", ta["ssg"], "GuardCode")]
+            ml_a, ml_b = model_path("awgn", crc_name), model_path("burst", crc_name)
+            if os.path.exists(ml_a) and "ml" in ta:
+                self.schemes.append(nn_awgn.with_gate("ml", ta["ml"], "GuardCode-ML", ml=MLGuard.load(ml_a)))
+            if os.path.exists(pb):
+                nn_burst = NeuralScheme(pb, "Neural+CRC")
+                self.adaptive = AdaptiveController({
+                    "awgn": nn_awgn.with_gate("ssg", ta["ssg"], "GuardCode-Adaptive"),
+                    "burst": nn_burst.with_gate("ssg", tb["ssg"], "GuardCode-Adaptive"),
+                })
+                if os.path.exists(ml_a) and os.path.exists(ml_b) and "ml" in ta and "ml" in tb:
+                    self.adaptive_ml = AdaptiveController({
+                        m: nn.with_gate("ml", t["ml"], "GuardCode-ML-Adaptive", ml=MLGuard.load(p))
+                        for m, nn, t, p in (("awgn", nn_awgn, ta, ml_a), ("burst", nn_burst, tb, ml_b))})
+        self.names = [s.name for s in self.schemes] + (["GuardCode-Adaptive"] if self.adaptive else []) + (
+            ["GuardCode-ML-Adaptive"] if self.adaptive_ml else [])
 
     # ------------------------------------------------------------------ control
     def reset_stats(self):
@@ -96,7 +104,10 @@ class LiveEngine(threading.Thread):
                 self.storm_until = time.time() + 20
             if "rate" in kw:
                 self.frames_per_tick = int(np.clip(int(kw["rate"]), 10, 2000))
-        if kw.get("reset"):
+            new_crc = kw.get("crc") in CRC_CHOICES and kw["crc"] != self.crc_name
+            if new_crc:
+                self.build(kw["crc"])
+        if kw.get("reset") or new_crc:
             self.reset_stats()
 
     def current_channel(self):
@@ -111,10 +122,11 @@ class LiveEngine(threading.Thread):
         msgs = self.rng.integers(0, 2, (B, 32)).astype(np.uint8)
         fb = self.crc.encode(msgs)
         rows = []
-        active = self.adaptive.active
-        for s in self.schemes + [None] + ([self.adaptive_ml] if self.adaptive_ml else []):
-            adaptive = s is None or s is self.adaptive_ml
-            ctl = self.adaptive if s is None else self.adaptive_ml
+        active = self.adaptive.active if self.adaptive else "-"
+        ctls = [c for c in (self.adaptive, self.adaptive_ml) if c]
+        for s in self.schemes + ctls:
+            adaptive = isinstance(s, AdaptiveController)
+            ctl = s
             if adaptive:
                 s = ctl.scheme          # profile chosen from previous frames (ACK feedback)
             x = s.encode(fb.astype(np.float64))
@@ -144,7 +156,7 @@ class LiveEngine(threading.Thread):
                          float(score[i]), 1) for i in range(B))
         self.seq += B
         t0 = time.time()
-        self.db.insert_frames(rows, self.con)
+        self.db.insert_frames(rows, self.con, crc=self.crc_name)
         self.con.execute("INSERT INTO adaptive_log(ts, run_id, burst_index, chosen_profile, true_channel)"
                          " VALUES (?,?,?,?,?)", (now, self.run_id, self.last_bidx, active, chan))
         self.con.commit()
@@ -204,8 +216,11 @@ class LiveEngine(threading.Thread):
                         storm_left=max(0, round(self.storm_until - time.time())),
                         rate=int(self.frames_per_tick / self.tick), names=self.names, kpis=kpis,
                         point=self.series[-1] if self.series else None, events=list(self.events)[:12],
-                        adaptive=dict(profile=self.adaptive.active, switches=self.adaptive.switches,
-                                      ewma=None if self.adaptive.ewma is None else round(self.adaptive.ewma, 3)),
+                        crc=self.crc_name,
+                        adaptive=dict(profile=self.adaptive.active if self.adaptive else "-",
+                                      switches=self.adaptive.switches if self.adaptive else 0,
+                                      ewma=None if not self.adaptive or self.adaptive.ewma is None
+                                      else round(self.adaptive.ewma, 3)),
                         db=dict(rows=self.rows_total, insert_rate=self.insert_rate, run_id=self.run_id,
                                 size_mb=round(os.path.getsize(self.db.path) / 1e6, 1)))
 

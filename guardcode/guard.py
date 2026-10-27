@@ -25,8 +25,35 @@ The residual risk  R(y) = 1 - P(b = x | y, Hb = 0)  is the posterior probability
 frame which PASSES the CRC is nevertheless wrong. The guard rejects (requests ARQ
 retransmission of) CRC-passing frames with R(y) > tau. No extra bits are sent and the
 CRC polynomial is not modified.
+
+The sum has 2^r terms per frame: 256 for CRC-8, 65,536 for CRC-16. When numba is installed
+the CRC-16 product-sum runs as a compiled, multi-core kernel (about 40x faster than numpy, which
+is what makes CRC-16 practical); otherwise the numpy path below is used.
 """
 import numpy as np
+
+try:
+    import numba
+
+    @numba.njit(parallel=True, fastmath=True, cache=True)
+    def _dual_sum(F, idx):
+        """mean over u of prod_c F[b, c, idx[u, c]] for every frame b."""
+        B, G, _ = F.shape
+        U = idx.shape[0]
+        out = np.empty(B)
+        for b in numba.prange(B):
+            s = 0.0
+            for u in range(U):
+                p = F[b, 0, idx[u, 0]]
+                for c in range(1, G):
+                    p *= F[b, c, idx[u, c]]
+                s += p
+            out[b] = s / U
+        return out
+except ImportError:
+    _dual_sum = None
+
+_CHUNK = 512        # frames per numpy chunk, keeps the (B, 2^r) work array small for CRC-16
 
 
 _HAD = {}
@@ -70,13 +97,22 @@ class SoftSyndromeGuard:
             self._idx[m] = (w * weights).sum(axis=2)    # (U, G)
         return self._idx[m]
 
-    def risk_groups(self, P):
-        """P: (B, G, 2^m) group posteriors. Returns (decision values (B,G), risk (B,))."""
+    def risk_groups(self, P, rows=None):
+        """P: (B, G, 2^m) group posteriors. Returns (decision values (B,G), risk (B,)).
+        rows: optional boolean mask; the risk is computed only there (1.0 elsewhere). The
+        receiver needs it only for CRC-passing frames, which saves most of the CRC-16 cost."""
         P = np.asarray(P, dtype=np.float64)
-        B, G, M = P.shape
-        m = int(np.log2(M))
         P = P / P.sum(axis=2, keepdims=True)
         dec = P.argmax(axis=2)
+        risk = np.ones(P.shape[0])
+        sel = np.arange(P.shape[0]) if rows is None else np.flatnonzero(rows)
+        if sel.size:
+            risk[sel] = self._risk(P[sel], dec[sel])
+        return dec, risk
+
+    def _risk(self, P, dec):
+        B, G, M = P.shape
+        m = int(np.log2(M))
         log_px = np.log(np.maximum(np.take_along_axis(P, dec[..., None], axis=2)[..., 0], 1e-300)).sum(axis=1)
         F = fwht(P)                                     # (B, G, M)
         idx = self._mask_index(m)                       # (U, G)
@@ -88,14 +124,23 @@ class SoftSyndromeGuard:
             mag = np.exp(np.log(np.maximum(np.abs(t), 1e-300)) @ Wf)
             sign = 1.0 - 2.0 * np.mod((t < 0).astype(np.float64) @ Wf, 2)
             pz = (sign * mag).mean(axis=1)
+        elif _dual_sum is not None and U >= 4096:      # CRC-16; CRC-8 keeps the numpy path
+            pz = _dual_sum(np.ascontiguousarray(F), self._idx32(m))
         else:
-            acc = np.ones((B, U))
-            for c in range(G):                          # product over groups, one gather each
-                acc *= F[:, c, :][:, idx[:, c]]
-            pz = acc.mean(axis=1)
+            pz = np.empty(B)
+            for a in range(0, B, _CHUNK):                # product over groups, one gather each
+                acc = np.ones((min(_CHUNK, B - a), U))
+                for c in range(G):
+                    acc *= F[a:a + _CHUNK, c, :][:, idx[:, c]]
+                pz[a:a + _CHUNK] = acc.mean(axis=1)
         pz = np.maximum(pz, np.exp(log_px))            # numerical guard: P(code) >= P(x)
-        risk = np.clip(1.0 - np.exp(log_px) / pz, 0.0, 1.0)
-        return dec, risk
+        return np.clip(1.0 - np.exp(log_px) / pz, 0.0, 1.0)
+
+    def _idx32(self, m):
+        key = ("i32", m)
+        if key not in self._idx:
+            self._idx[key] = np.ascontiguousarray(self._mask_index(m).astype(np.int32))
+        return self._idx[key]
 
     # bit-level version (groups of 1 bit) kept for reference / ablation
     def risk(self, p1, bits=None):

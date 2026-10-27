@@ -9,7 +9,7 @@ Pages
 API
   GET  /stream             SSE snapshots
   GET  /api/history        chart history
-  POST /api/control        {ebno, channel, paused, storm, rate, reset}
+  POST /api/control        {ebno, channel, crc, paused, storm, rate, reset}
   GET  /api/benchmark      offline benchmark table (from python -m guardcode.evaluate)
   GET  /api/dbstats        table sizes
   POST /api/query          {"sql": "SELECT ..."}  read-only, 500-row limit
@@ -39,6 +39,9 @@ FROM frames GROUP BY scheme ORDER BY uer DESC""",
     "Share of errors that slipped past the CRC": """SELECT scheme, channel, SUM(outcome IN (1,2)) AS frame_errors, SUM(outcome=2) AS undetected,
   ROUND(100.0*SUM(outcome=2)/MAX(1,SUM(outcome IN (1,2))), 4) AS pct_undetected
 FROM frames GROUP BY scheme, channel ORDER BY channel, pct_undetected DESC""",
+    "CRC-8 vs CRC-16 (undetected errors)": """SELECT crc, scheme, COUNT(*) AS frames, SUM(outcome IN (1,2)) AS frame_errors, SUM(outcome=2) AS undetected,
+  ROUND(100.0*SUM(outcome=2)/MAX(1,SUM(outcome IN (1,2))), 5) AS pct_undetected
+FROM frames GROUP BY crc, scheme ORDER BY crc, pct_undetected DESC""",
     "Undetected error rate vs Eb/N0": """SELECT scheme, channel, ROUND(ebno_db) AS ebno, COUNT(*) AS frames, SUM(outcome=2) AS undetected
 FROM frames GROUP BY scheme, channel, ROUND(ebno_db) ORDER BY channel, scheme, ebno""",
     "Last 25 undetected frames": """SELECT id, datetime(ts,'unixepoch','localtime') AS time, scheme, channel, ROUND(ebno_db,2) AS ebno,
@@ -49,8 +52,8 @@ FROM frames WHERE scheme LIKE 'GuardCode%' GROUP BY scheme, outcome""",
     "Adaptive controller decisions": """SELECT true_channel, chosen_profile, COUNT(*) AS ticks, ROUND(AVG(burst_index),3) AS avg_burst_index
 FROM adaptive_log GROUP BY true_channel, chosen_profile""",
     "Runs": "SELECT id, datetime(started_at,'unixepoch','localtime') AS started, mode, notes FROM runs ORDER BY id DESC LIMIT 50",
-    "Offline benchmark (GuardCode vs baselines)": """SELECT profile, scheme, ebno_db, frames, fer, uer, undetected, ROUND(goodput,4) AS goodput
-FROM benchmark WHERE id IN (SELECT MAX(id) FROM benchmark GROUP BY profile, scheme, ebno_db) ORDER BY profile, ebno_db, scheme""",
+    "Offline benchmark (GuardCode vs baselines)": """SELECT profile, crc, scheme, ebno_db, frames, fer, uer, undetected, ROUND(goodput,4) AS goodput
+FROM benchmark WHERE id IN (SELECT MAX(id) FROM benchmark GROUP BY profile, crc, scheme, ebno_db) ORDER BY profile, crc, ebno_db, scheme""",
 }
 
 
@@ -93,7 +96,7 @@ def control():
 def benchmark():
     con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
-    rows = con.execute("SELECT * FROM benchmark WHERE id IN (SELECT MAX(id) FROM benchmark GROUP BY profile, scheme, ebno_db)"
+    rows = con.execute("SELECT * FROM benchmark WHERE id IN (SELECT MAX(id) FROM benchmark GROUP BY profile, crc, scheme, ebno_db)"
                        " ORDER BY profile, scheme, ebno_db").fetchall()
     con.close()
     return jsonify([dict(r) for r in rows])

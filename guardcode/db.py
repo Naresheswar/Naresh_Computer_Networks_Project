@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS frames (
     bit_errors  INTEGER NOT NULL,        -- payload bit errors after decoding
     outcome     INTEGER NOT NULL,        -- 0 OK, 1 DETECTED, 2 UNDETECTED, 3 FALSE_REJECT
     reliability REAL NOT NULL,           -- SSG residual risk R(y) (min |LLR| for the LLR-gated scheme)
-    attempt     INTEGER NOT NULL DEFAULT 1   -- ARQ transmission attempt number
+    attempt     INTEGER NOT NULL DEFAULT 1,  -- ARQ transmission attempt number
+    crc         TEXT NOT NULL DEFAULT 'CRC-8'  -- CRC-8 | CRC-16
 );
 CREATE INDEX IF NOT EXISTS ix_frames_run    ON frames(run_id);
 CREATE INDEX IF NOT EXISTS ix_frames_ts     ON frames(ts);
@@ -45,7 +46,7 @@ CREATE TABLE IF NOT EXISTS benchmark (
     id INTEGER PRIMARY KEY AUTOINCREMENT, created_at REAL, profile TEXT, scheme TEXT,
     ebno_db REAL, n_sym INTEGER, frames INTEGER, bit_errors INTEGER, frame_errors INTEGER,
     detected INTEGER, undetected INTEGER, false_rej INTEGER, ber REAL, fer REAL, uer REAL,
-    goodput REAL
+    goodput REAL, crc TEXT NOT NULL DEFAULT 'CRC-8'
 );
 CREATE TABLE IF NOT EXISTS adaptive_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, run_id INTEGER, burst_index REAL,
@@ -66,6 +67,10 @@ class Database:
         self.lock = threading.Lock()
         con = self.connect()
         con.executescript(SCHEMA)
+        for table in ("frames", "benchmark"):      # databases created before CRC-16 support
+            cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+            if "crc" not in cols:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN crc TEXT NOT NULL DEFAULT 'CRC-8'")
         con.commit()
         con.close()
 
@@ -85,13 +90,13 @@ class Database:
             con.close()
         return rid
 
-    def insert_frames(self, rows, con=None):
+    def insert_frames(self, rows, con=None, crc="CRC-8"):
         """rows: iterable of (run_id, ts, seq, scheme, channel, ebno_db, bit_errors, outcome, reliability, attempt)"""
         own = con is None
         con = con or self.connect()
         with self.lock:
             con.executemany("INSERT INTO frames(run_id, ts, seq, scheme, channel, ebno_db, bit_errors, outcome,"
-                            " reliability, attempt) VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+                            " reliability, attempt, crc) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (r + (crc,) for r in rows))
             con.commit()
         if own:
             con.close()
@@ -101,10 +106,10 @@ class Database:
         now = time.time()
         con.executemany(
             "INSERT INTO benchmark(created_at, profile, scheme, ebno_db, n_sym, frames, bit_errors, frame_errors,"
-            " detected, undetected, false_rej, ber, fer, uer, goodput) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " detected, undetected, false_rej, ber, fer, uer, goodput, crc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [(now, r["profile"], r["scheme"], r["ebno_db"], r["n_sym"], r["frames"], r["bit_errors"],
               r["frame_errors"], r["detected"], r["undetected"], r["false_rej"], r["ber"], r["fer"],
-              r["uer"], r["goodput"]) for r in rows])
+              r["uer"], r["goodput"], r.get("crc", "CRC-8")) for r in rows])
         con.commit()
         con.close()
 

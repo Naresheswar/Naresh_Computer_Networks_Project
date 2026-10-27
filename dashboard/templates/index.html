@@ -11,7 +11,7 @@
 <header>
   <div>
     <h1>GuardCode <span class="sub">Live link monitor</span></h1>
-    <p class="tag">Soft-Syndrome Guard on a CRC-8 protected neural FEC link &middot; 32-bit payload &middot; every frame logged to SQLite</p>
+    <p class="tag">Soft-Syndrome Guard on a CRC-8 / CRC-16 protected neural FEC link &middot; 32-bit payload &middot; every frame logged to SQLite</p>
   </div>
   <nav><a href="/" class="active">Live</a><a href="/explorer">Database explorer</a></nav>
 </header>
@@ -30,6 +30,13 @@
     </div>
   </div>
   <div class="ctl">
+    <label>CRC</label>
+    <div class="seg" id="crcSeg">
+      <button data-crc="CRC-8" class="on">CRC-8</button>
+      <button data-crc="CRC-16">CRC-16</button>
+    </div>
+  </div>
+  <div class="ctl">
     <label>Frames per scheme / s</label>
     <select id="rate"><option value="25">50</option><option value="100" selected>200</option><option value="250">500</option><option value="500">1000</option><option value="1000">2000</option></select>
   </div>
@@ -42,6 +49,7 @@
 
 <section class="status">
   <div class="pill" id="runPill">running</div>
+  <div class="stat"><span>CRC</span><b id="crcVal">CRC-8</b></div>
   <div class="stat"><span>Effective channel</span><b id="effChan">AWGN</b></div>
   <div class="stat"><span>Adaptive profile</span><b id="profile">awgn</b></div>
   <div class="stat"><span>Burst index (EWMA)</span><b id="bidx">-</b></div>

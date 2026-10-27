@@ -27,8 +27,9 @@ MODELS = os.path.join(ROOT, "models")
 WINDOW = 7
 
 
-def model_path(profile):
-    return os.path.join(MODELS, f"mlguard_{profile}.joblib")
+def model_path(profile, crc_name="CRC-8"):
+    sfx = "" if crc_name == "CRC-8" else "_" + crc_name.lower().replace("-", "")
+    return os.path.join(MODELS, f"mlguard_{profile}{sfx}.joblib")
 
 
 def features(scheme, P, risk, llr, y, h, bits):

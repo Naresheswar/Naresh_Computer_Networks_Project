@@ -1,9 +1,11 @@
 """
-Unified link-layer schemes. Every scheme carries the same 32-bit payload + CRC-8
-(a 40-bit frame). All coded schemes use 70 channel symbols (rate 32/70).
+Unified link-layer schemes. Every scheme carries the same 32-bit payload plus a CRC:
+    CRC-8  (default): 40-bit frame, coded schemes use 70 channel symbols (rate 32/70)
+    CRC-16          : 48-bit frame, coded schemes use 84 channel symbols (rate 32/84)
+The two CRCs keep separate neural models, thresholds and results (file suffix '_crc16').
 
 Every decoder exposes group posteriors (bytes for the neural decoder, 4-bit blocks for
-Hamming, single bits for uncoded) over the 40 frame bits, so that any acceptance rule can
+Hamming, single bits for uncoded) over the frame bits, so that any acceptance rule can
 be applied on top:
 
     gate = None   accept iff CRC passes                            (standard receiver)
@@ -12,7 +14,7 @@ be applied on top:
     gate = 'ml'   ... and learned gradient-boosted risk score <= tau (guardcode/mlguard.py)
 
 Line-up used in the experiments
-    Uncoded+CRC            40 BPSK symbols
+    Uncoded+CRC            40 (CRC-8) or 48 (CRC-16) BPSK symbols
     Hamming+CRC            Hamming(7,4) soft decoding (block interleaved on burst channels)
     Hamming+CRC+SSG        same decoder + Soft-Syndrome Guard  (shows SSG is decoder-agnostic)
     Neural+CRC             neural code, plain bit-metric training (ablation)
@@ -35,24 +37,34 @@ from . import mlguard
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS = os.path.join(ROOT, "models")
 K_INFO = 32
-CRC_NAME = "CRC-8"
-_CRC = CRC(K_INFO, CRC_NAME)
-_SSG = SoftSyndromeGuard(_CRC)
+CRC_NAME = "CRC-8"                        # default; "CRC-16" is also supported
+CRC_CHOICES = ("CRC-8", "CRC-16")
+_CRC, _SSG = {}, {}
 # bits of every group value, MSB first: _VALUE_BITS[m] has shape (2^m, m)
 _VALUE_BITS = {m: ((np.arange(2 ** m)[:, None] >> np.arange(m - 1, -1, -1)) & 1).astype(np.uint8) for m in (1, 2, 4, 8)}
 
 
-def crc():
-    return _CRC
+def crc(name=CRC_NAME):
+    if name not in _CRC:
+        _CRC[name] = CRC(K_INFO, name)
+    return _CRC[name]
 
 
-def ssg():
-    return _SSG
+def ssg(name=CRC_NAME):
+    if name not in _SSG:
+        _SSG[name] = SoftSyndromeGuard(crc(name))
+    return _SSG[name]
+
+
+def suffix(crc_name=CRC_NAME):
+    """File-name suffix for models, thresholds and results: '' for CRC-8, '_crc16' for CRC-16."""
+    return "" if crc_name == CRC_NAME else "_" + crc_name.lower().replace("-", "")
 
 
 class Scheme:
     name = "base"
     n = 40
+    crc_name = CRC_NAME
     gate = None
     tau = None
     ml = None                     # MLGuard instance, used when gate == 'ml'
@@ -65,7 +77,7 @@ class Scheme:
         raise NotImplementedError
 
     def groups(self, y, h, ebno_db):
-        """Return group posteriors (B, G, 2^m) over the 40 frame bits."""
+        """Return group posteriors (B, G, 2^m) over the frame bits (40 for CRC-8, 48 for CRC-16)."""
         raise NotImplementedError
 
     def with_gate(self, gate, tau, name, ml=None):
@@ -79,9 +91,11 @@ class Scheme:
         P = self.groups(y, h, ebno_db)
         B, G, M = P.shape
         m = int(np.log2(M))
-        dec, risk = _SSG.risk_groups(P)
-        bits = _VALUE_BITS[m][dec].reshape(B, G * m)
-        crc_ok = _CRC.check(bits)
+        c = crc(self.crc_name)
+        bits = _VALUE_BITS[m][P.argmax(axis=2)].reshape(B, G * m)
+        crc_ok = c.check(bits)
+        # CRC-16: the 65,536-term risk is only needed where the CRC passes (1.0 elsewhere)
+        _, risk = ssg(self.crc_name).risk_groups(P, rows=crc_ok if c.r > 8 else None)
         p1 = np.clip(P @ _VALUE_BITS[m].astype(np.float64), 1e-15, 1 - 1e-15).reshape(B, G * m)
         llr = np.abs(np.log(p1) - np.log1p(-p1)).min(axis=1)
         accept = crc_ok.copy()
@@ -98,7 +112,10 @@ class Scheme:
 
 class Uncoded(Scheme):
     name = "Uncoded+CRC"
-    n = 40
+
+    def __init__(self, crc_name=CRC_NAME):
+        self.crc_name = crc_name
+        self.n = crc(crc_name).n
 
     def encode(self, frames):
         return 1.0 - 2.0 * frames
@@ -111,8 +128,9 @@ class Uncoded(Scheme):
 
 
 class HammingScheme(Scheme):
-    def __init__(self, interleave=False, name=None):
-        self.code = Hamming74(40, interleave)
+    def __init__(self, interleave=False, name=None, crc_name=CRC_NAME):
+        self.crc_name = crc_name
+        self.code = Hamming74(crc(crc_name).n, interleave)
         self.n = self.code.n
         self.name = name or "Hamming+CRC"
 
@@ -121,7 +139,7 @@ class HammingScheme(Scheme):
 
     def groups(self, y, h, ebno_db):
         s2 = sigma_from_ebno(ebno_db, self.rate) ** 2
-        return self.code.block_posteriors(y, h, s2)     # (B, 10, 16)
+        return self.code.block_posteriors(y, h, s2)     # (B, frame bits / 4, 16)
 
 
 class NeuralScheme(Scheme):
@@ -130,17 +148,18 @@ class NeuralScheme(Scheme):
         self.n = self.model.n
         self.name = name
         self.meta = self.model.meta
+        self.crc_name = "CRC-16" if self.meta.get("crc", CRC_NAME).startswith("CRC-16") else self.meta.get("crc", CRC_NAME)
 
     def encode(self, frames):
         return self.model.encode(frames)
 
     def groups(self, y, h, ebno_db):
-        return self.model.byte_posteriors(y * h)        # (B, 5, 256)
+        return self.model.byte_posteriors(y * h)        # (B, frame bytes, 256)
 
 
-def thresholds(profile):
+def thresholds(profile, crc_name=CRC_NAME):
     """Gate thresholds calibrated by guardcode/evaluate.py (equal false-reject budget)."""
-    path = os.path.join(MODELS, f"thresholds_{profile}.txt")
+    path = os.path.join(MODELS, f"thresholds_{profile}{suffix(crc_name)}.txt")
     out = dict(llr=4.0, ssg=1e-3, ssg_hamming=1e-3)
     if os.path.exists(path):
         for line in open(path):
@@ -149,17 +168,22 @@ def thresholds(profile):
     return out
 
 
-def load_schemes(profile="awgn", models_profile=None):
-    """Ordered line-up for a channel profile ('awgn' | 'burst' | 'fading')."""
+def neural_path(profile, crc_name=CRC_NAME):
+    return os.path.join(MODELS, f"base_{profile}{suffix(crc_name)}.npz")
+
+
+def load_schemes(profile="awgn", models_profile=None, crc_name=CRC_NAME):
+    """Ordered line-up for a channel profile ('awgn' | 'burst' | 'fading') and CRC ('CRC-8' | 'CRC-16')."""
     mp = models_profile or ("burst" if profile == "burst" else "awgn")
-    th = thresholds(mp)
-    ham = HammingScheme(interleave=(profile == "burst"))
-    s = [Uncoded(), ham, ham.with_gate("ssg", th["ssg_hamming"], "Hamming+CRC+SSG")]
-    base = os.path.join(MODELS, f"base_{mp}.npz")
+    th = thresholds(mp, crc_name)
+    ham = HammingScheme(interleave=(profile == "burst"), crc_name=crc_name)
+    s = [Uncoded(crc_name), ham, ham.with_gate("ssg", th["ssg_hamming"], "Hamming+CRC+SSG")]
+    base = neural_path(mp, crc_name)
     if os.path.exists(base):
         nb = NeuralScheme(base, "Neural+CRC")
         s += [nb, nb.with_gate("llr", th["llr"], "Neural+CRC+LLR"),
               nb.with_gate("ssg", th["ssg"], "GuardCode")]
-        if os.path.exists(model_path(mp)) and "ml" in th:
-            s.append(nb.with_gate("ml", th["ml"], "GuardCode-ML", ml=MLGuard.load(model_path(mp))))
+        mlp = model_path(mp, crc_name)
+        if os.path.exists(mlp) and "ml" in th:
+            s.append(nb.with_gate("ml", th["ml"], "GuardCode-ML", ml=MLGuard.load(mlp)))
     return s
