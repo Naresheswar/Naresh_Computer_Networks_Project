@@ -29,6 +29,7 @@ echo [2/5] Installing dependencies (torch is large - a few minutes)...
 echo [3/5] Benchmark sweep (skipped if results are already present)...
 if exist results\benchmark.csv (
   %VPY% -m guardcode.evaluate --import-csv || goto :err
+  if exist results\benchmark_crc16.csv ( %VPY% -m guardcode.evaluate --import-csv --crc CRC-16 || goto :err )
 ) else (
   %VPY% -m guardcode.evaluate --frames 200000 || goto :err
 )

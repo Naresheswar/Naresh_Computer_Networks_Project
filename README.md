@@ -142,4 +142,20 @@ python scripts/populate_db.py --crc CRC-8,CRC-16             # database with bot
 
 The dashboard has a **CRC-8 / CRC-16** switch. The database records the CRC of every frame and benchmark row, and the explorer has a "CRC-8 vs CRC-16" preset.
 
+### CRC-16 results
+
+These are undetected frames pooled over 0–7 dB, with 300,000 frames per point (2.4 million per row), from `results/benchmark_crc16.csv`:
+
+| Receiver | AWGN | Burst | Real 802.15.4 (CRAWDAD) |
+|---|---|---|---|
+| Uncoded + CRC-16 | 49 | 65 | 51 |
+| Hamming + CRC-16 → + SSG | 6 → 0 | 11 → 2 | 6 → 3 |
+| Neural + CRC-16 | 5 | 17 | 13 |
+| Neural + CRC-16 + LLR test | 5 | 16 | 13 |
+| **GuardCode (CRC-16)** | **0** | **8** | **3** |
+
+- **What CRC-16 does:** it removes about 99% of the undetected errors CRC-8 lets through. Neural+CRC drops from 1,559 to 5 on AWGN and from 2,154 to 13 on the real channel.
+- **What the guard adds:** it still lowers the remainder. The counts are single-digit, though, so they show the direction rather than a precise percentage; measuring that would take hundreds of millions of frames.
+- **The cost:** the 8 extra CRC bits lower goodput from 3 dB upward, from 0.40 to 0.29 on AWGN for the neural code. CRC-8 with GuardCode-ML keeps the higher goodput, at 324 undetected frames instead of about 5. Which is better depends on how much one undetected error costs the application.
+
 **No ML gate for CRC-16.** Only about 2 in 600,000 CRC-16 frames passed the check while still being wrong, so even 6 million training frames would give about 20 positive examples, far too few to train a classifier honestly. CRC-16 runs with the exact Soft-Syndrome Guard only.
