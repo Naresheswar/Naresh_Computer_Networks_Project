@@ -30,11 +30,13 @@ def calibrate(profile, ebno=3.0, frr=0.01, n=200000, seed=11, crc_name="CRC-8"):
     c = crc(crc_name)
     cfg = ChannelConfig(profile)
     out = {}
-    jobs = [("ssg_hamming", HammingScheme(interleave=(profile == "burst"), crc_name=crc_name), "risk")]
+    # the risk is read through an SSG-gated copy (CRC-16 only computes it for guarded receivers)
+    ham = HammingScheme(interleave=(profile == "burst"), crc_name=crc_name)
+    jobs = [("ssg_hamming", ham.with_gate("ssg", 1.0, "cal"), "risk")]
     base = neural_path(profile, crc_name)
     if os.path.exists(base):
         nb = NeuralScheme(base, "cal")
-        jobs += [("llr", nb, "llr"), ("ssg", nb, "risk")]
+        jobs += [("llr", nb, "llr"), ("ssg", nb.with_gate("ssg", 1.0, "cal"), "risk")]
         if os.path.exists(model_path(profile, crc_name)):
             from .mlguard import MLGuard
             jobs.append(("ml", nb.with_gate("ml", 1.0, "cal", ml=MLGuard.load(model_path(profile, crc_name))), "ml"))
