@@ -7,6 +7,7 @@ and EVERY frame is stored as one row of the `frames` table.
     python scripts/populate_db.py                    # 1,000,000 frames (default)
     python scripts/populate_db.py --frames 5000000   # larger database
     python scripts/populate_db.py --crc CRC-8,CRC-16 # both CRCs (frames split between them)
+    python scripts/populate_db.py --ml               # also store the GuardCode-ML receiver
 """
 import argparse
 import os
@@ -28,6 +29,7 @@ def main():
     ap.add_argument("--frames", type=int, default=1_000_000)
     ap.add_argument("--seed", type=int, default=2026)
     ap.add_argument("--crc", default="CRC-8", help="CRC-8, CRC-16 or both: CRC-8,CRC-16")
+    ap.add_argument("--ml", action="store_true", help="also store the GuardCode-ML receiver (hidden on the dashboard)")
     a = ap.parse_args()
 
     db = Database()
@@ -39,6 +41,8 @@ def main():
     for crc_name in a.crc.split(","):
         for prof in ("awgn", "burst", "fading"):
             for s in load_schemes(prof, crc_name=crc_name):
+                if s.gate == "ml" and not a.ml:
+                    continue
                 for e in ebnos:
                     plan.append((prof, s, float(e)))
     per = max(1, a.frames // len(plan))

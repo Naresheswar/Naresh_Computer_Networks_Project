@@ -122,6 +122,10 @@ def query():
         return jsonify(error="Only a single SELECT statement is allowed."), 400
     try:
         con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=10)
+        if not SHOW_ML:
+            # temp views shadow the stored tables, so every query skips the hidden GuardCode-ML rows
+            for t in ("frames", "benchmark"):
+                con.execute(f"CREATE TEMP VIEW {t} AS SELECT * FROM main.{t} WHERE scheme NOT LIKE 'GuardCode-ML%'")
         t0 = time.time()
         cur = con.execute(sql)
         cols = [d[0] for d in cur.description]
