@@ -26,6 +26,7 @@ from guardcode.schemes import (CRC_CHOICES, HammingScheme, NeuralScheme,  # noqa
 
 HISTORY = 240          # chart points kept in memory
 WINDOW = 20            # ticks in the rolling window
+SHOW_ML = False        # show the GuardCode-ML rows (learned gate) on the dashboard
 
 
 class LiveEngine(threading.Thread):
@@ -68,7 +69,7 @@ class LiveEngine(threading.Thread):
             self.schemes += [nn_awgn.with_gate("llr", ta["llr"], "Neural+CRC+LLR"),
                              nn_awgn.with_gate("ssg", ta["ssg"], "GuardCode")]
             ml_a, ml_b = model_path("awgn", crc_name), model_path("burst", crc_name)
-            if os.path.exists(ml_a) and "ml" in ta:
+            if SHOW_ML and os.path.exists(ml_a) and "ml" in ta:
                 self.schemes.append(nn_awgn.with_gate("ml", ta["ml"], "GuardCode-ML", ml=MLGuard.load(ml_a)))
             if os.path.exists(pb):
                 nn_burst = NeuralScheme(pb, "Neural+CRC")
@@ -76,7 +77,7 @@ class LiveEngine(threading.Thread):
                     "awgn": nn_awgn.with_gate("ssg", ta["ssg"], "GuardCode-Adaptive"),
                     "burst": nn_burst.with_gate("ssg", tb["ssg"], "GuardCode-Adaptive"),
                 })
-                if os.path.exists(ml_a) and os.path.exists(ml_b) and "ml" in ta and "ml" in tb:
+                if SHOW_ML and os.path.exists(ml_a) and os.path.exists(ml_b) and "ml" in ta and "ml" in tb:
                     self.adaptive_ml = AdaptiveController({
                         m: nn.with_gate("ml", t["ml"], "GuardCode-ML-Adaptive", ml=MLGuard.load(p))
                         for m, nn, t, p in (("awgn", nn_awgn, ta, ml_a), ("burst", nn_burst, tb, ml_b))})

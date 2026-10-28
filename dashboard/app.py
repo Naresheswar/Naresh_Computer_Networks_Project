@@ -26,7 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 from guardcode.db import DB_PATH, Database   # noqa: E402
-from engine import LiveEngine               # noqa: E402
+from engine import SHOW_ML, LiveEngine      # noqa: E402
 
 app = Flask(__name__, template_folder=os.path.join(HERE, "templates"), static_folder=os.path.join(HERE, "static"))
 db = Database()
@@ -97,7 +97,8 @@ def benchmark():
     con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     rows = con.execute("SELECT * FROM benchmark WHERE id IN (SELECT MAX(id) FROM benchmark GROUP BY profile, crc, scheme, ebno_db)"
-                       " ORDER BY profile, scheme, ebno_db").fetchall()
+                       + ("" if SHOW_ML else " AND scheme NOT LIKE 'GuardCode-ML%'")
+                       + " ORDER BY profile, scheme, ebno_db").fetchall()
     con.close()
     return jsonify([dict(r) for r in rows])
 
